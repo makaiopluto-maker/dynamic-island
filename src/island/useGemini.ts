@@ -38,7 +38,13 @@ export function useGemini() {
       const body = (await response.json()) as { text?: string; error?: string };
       if (!response.ok || !body.text) {
         setConfigured(body.error === "not_configured" ? false : configured);
-        setError(body.error === "not_configured" ? "Gemini isn't connected on this copy yet." : "Gemini didn't answer.");
+        setError(
+          body.error === "not_configured"
+            ? "Gemini isn't connected on this copy yet."
+            : body.error === "unauthorized"
+              ? "Sign in to use Gemini."
+              : "Gemini didn't answer.",
+        );
         return;
       }
       setTurns([...history, { role: "model", text: body.text }]);

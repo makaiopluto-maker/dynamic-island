@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { getIdentity } from "../cursor/identity.ts";
 import { sampleEvents, sampleMail, seoulDay } from "../shared/sample.mjs";
 import { brightnessSupported, readBrightness, writeBrightness } from "./brightness.mjs";
 
@@ -458,14 +459,21 @@ function youtubeLimited(request) {
   return false;
 }
 
-function geminiLimited(request) {
-  const ip = (request.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim() || "local";
+function geminiLimited(sub) {
   const now = Date.now();
-  const recent = (geminiHits.get(ip) ?? []).filter((stamp) => now - stamp < 60_000);
+  const recent = (geminiHits.get(sub) ?? []).filter((stamp) => now - stamp < 60_000);
   if (recent.length >= 20) return true;
   recent.push(now);
-  geminiHits.set(ip, recent);
+  geminiHits.set(sub, recent);
   return false;
+}
+
+async function requirePerson(request) {
+  const identity = await getIdentity(request);
+  if (!identity.verified || identity.kind !== "person") {
+    return json({ error: "unauthorized" }, { status: 401 });
+  }
+  return identity;
 }
 
 function geminiReady() {
@@ -533,6 +541,8 @@ function cleanMessages(body) {
 export async function handleApi(request) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/")) return null;
+  const viewer = await requirePerson(request);
+  if (viewer instanceof Response) return viewer;
   const now = new Date();
   const secure = secureRequest(request);
   const cookies = readCookies(request);
@@ -545,7 +555,7 @@ export async function handleApi(request) {
   if (url.pathname === "/api/gemini" && request.method === "POST") {
     if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
     if (!geminiReady()) return json({ error: "not_configured" }, { status: 404 });
-    if (geminiLimited(request)) return json({ error: "busy" }, { status: 429 });
+    if (geminiLimited(viewer.sub)) return json({ error: "busy" }, { status: 429 });
     const messages = cleanMessages(await request.json().catch(() => null));
     if (!messages) return json({ error: "bad_request" }, { status: 400 });
     try {
