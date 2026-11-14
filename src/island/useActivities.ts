@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { snippets, tracks } from "./data.ts";
-import { askNotify, islandNotify, pushNotice } from "./desk.ts";
-import type { ClaudeTab } from "./types.ts";
+import { tracks } from "./data.ts";
 
 export function useNow() {
   const [now, setNow] = useState(() => new Date());
@@ -58,6 +56,7 @@ export function useMusic() {
 
   const toggle = useCallback(() => setPlaying((value) => !value), []);
   const play = useCallback(() => setPlaying(true), []);
+  const pause = useCallback(() => setPlaying(false), []);
   const next = useCallback(() => {
     const upcoming = (indexRef.current + 1) % tracks.length;
     indexRef.current = upcoming;
@@ -85,7 +84,7 @@ export function useMusic() {
   }, []);
 
   useEffect(() => {
-    if (!("mediaSession" in navigator)) return;
+    if (!playing || !("mediaSession" in navigator)) return;
     const track = tracks[index];
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title,
@@ -109,94 +108,10 @@ export function useMusic() {
     position,
     toggle,
     play,
+    pause,
     next,
     prev,
     seek,
   };
 }
 
-export function useFocus() {
-  const [duration, setDuration] = useState(25 * 60);
-  const [remaining, setRemaining] = useState(25 * 60);
-  const [running, setRunning] = useState(false);
-  const [done, setDone] = useState(false);
-  const remainingRef = useRef(25 * 60);
-  const durationRef = useRef(25 * 60);
-
-  useEffect(() => {
-    remainingRef.current = remaining;
-    durationRef.current = duration;
-  });
-
-  useEffect(() => {
-    if (!running) return;
-    const id = window.setInterval(() => {
-      const next = remainingRef.current - 1;
-      if (next <= 0) {
-        remainingRef.current = 0;
-        setRemaining(0);
-        setRunning(false);
-        setDone(true);
-        pushNotice({
-          id: `focus-${Date.now()}`,
-          title: "Focus",
-          body: "Session complete.",
-          at: Date.now(),
-        });
-        islandNotify("Focus", "Session complete.");
-        return;
-      }
-      remainingRef.current = next;
-      setRemaining(next);
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [running]);
-
-  const start = useCallback(() => {
-    askNotify();
-    const next = remainingRef.current <= 0 ? durationRef.current : remainingRef.current;
-    remainingRef.current = next;
-    setRemaining(next);
-    setDone(false);
-    setRunning(true);
-  }, []);
-
-  const pause = useCallback(() => setRunning(false), []);
-
-  const choose = useCallback((minutes: number) => {
-    const next = Math.min(60, Math.max(1, minutes)) * 60;
-    durationRef.current = next;
-    remainingRef.current = next;
-    setRunning(false);
-    setDuration(next);
-    setRemaining(next);
-    setDone(false);
-  }, []);
-
-  return { duration, remaining, running, done, start, pause, choose };
-}
-
-export function useEditing(active: boolean) {
-  const [seconds, setSeconds] = useState(0);
-  const [live, setLive] = useState(false);
-  const [tab, setTab] = useState<ClaudeTab>("edit");
-  const [snippet, setSnippet] = useState(0);
-
-  if (active && !live) setLive(true);
-
-  useEffect(() => {
-    if (!live) return;
-    const id = window.setInterval(() => setSeconds((value) => value + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [live]);
-
-  useEffect(() => {
-    if (!active || tab !== "edit") return;
-    const id = window.setInterval(() => {
-      setSnippet((value) => (value + 1) % snippets.length);
-    }, 3200);
-    return () => window.clearInterval(id);
-  }, [active, tab]);
-
-  return { seconds, live, tab, setTab, snippet };
-}

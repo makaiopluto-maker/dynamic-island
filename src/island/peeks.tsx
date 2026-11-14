@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { CalendarEvent, IslandContact, IslandNotice, IslandPhoto, LiveState, MailMessage } from "./desk.ts";
 import { formatWhen } from "./desk.ts";
 import { seoulFace } from "./format.ts";
@@ -72,31 +72,35 @@ function EventList({ events, error }: { events: CalendarEvent[]; error?: string 
 
 export function PeekView({
   id,
-  dim,
   now,
   live,
   photos,
   contacts,
   notices,
   contactsSupported,
+  brightness,
+  onBrightness,
   onAddPhotos,
   onPickContacts,
   onDisconnect,
 }: {
   id: PeekId;
-  dim: boolean;
   now: Date;
   live: LiveState;
   photos: IslandPhoto[];
   contacts: IslandContact[];
   notices: IslandNotice[];
   contactsSupported: boolean;
+  brightness: { level: number | null; supported: boolean };
+  onBrightness: (level: number) => void;
   onAddPhotos: (files: FileList | null) => void;
   onPickContacts: () => void;
   onDisconnect: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const face = seoulFace(now, null);
+  const [dragged, setDragged] = useState<number | null>(null);
+  const bright = dragged ?? brightness.level ?? 70;
 
   if (id === "mail") {
     const unread = live.mail.messages.filter((message) => message.unread).length;
@@ -239,18 +243,40 @@ export function PeekView({
           <li>Photos · this device</li>
           <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
           <li>Music · system media keys</li>
-          <li>Focus · a notice when the session ends</li>
+          <li>Radio · live stations</li>
+          <li>Gemini · in this island</li>
+          <li>Lights · {brightness.supported ? "this monitor" : "the Windows app on this PC"}</li>
         </ul>
       </div>
     );
   }
 
   return (
-    <div className="peek">
-      <div>
-        <h2>{dim ? "Lights down" : "Lights up"}</h2>
-        <p>{dim ? "The room is dim. The glass keeps its glow." : "Daylight is back across the glass."}</p>
+    <div className="peek stack">
+      <div className="peek-head">
+        <h2>Brightness</h2>
+        <span className={brightness.supported ? "badge live" : "badge"}>{brightness.supported ? "Monitor" : "Windows app"}</span>
       </div>
+      <p className="bright-level">{bright}%</p>
+      <input
+        className="scrub bright-slider"
+        type="range"
+        min={0}
+        max={100}
+        value={bright}
+        aria-label="Monitor brightness"
+        style={{ ["--p" as string]: `${bright}%` }}
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          setDragged(next);
+          onBrightness(next);
+        }}
+      />
+      <p className="fine">
+        {brightness.supported
+          ? "This slider moves the monitor on this PC."
+          : "The Windows app on this PC moves the monitor. This copy only shows the level."}
+      </p>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { sampleEvents, sampleMail, seoulDay } from "../shared/sample.mjs";
+import { brightnessSupported, readBrightness, writeBrightness } from "./brightness.mjs";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -258,6 +259,85 @@ function cacheKey(token) {
   return createHash("sha256").update(token).digest("hex").slice(0, 16);
 }
 
+const geminiHits = new Map();
+
+function sameOrigin(request) {
+  const origin = request.headers.get("origin");
+  return Boolean(origin) && origin === new URL(request.url).origin;
+}
+
+function geminiLimited(request) {
+  const ip = (request.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim() || "local";
+  const now = Date.now();
+  const recent = (geminiHits.get(ip) ?? []).filter((stamp) => now - stamp < 60_000);
+  if (recent.length >= 20) return true;
+  recent.push(now);
+  geminiHits.set(ip, recent);
+  return false;
+}
+
+function geminiReady() {
+  return Boolean(process.env.GEMINI_API_KEY?.trim());
+}
+
+async function askGemini(messages) {
+  const contents = messages.map((message) => ({
+    role: message.role,
+    parts: [{ text: message.text }],
+  }));
+  const models = ["gemini-3.5-flash", "gemini-2.5-flash"];
+  let lastStatus = 502;
+  for (const model of models) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": process.env.GEMINI_API_KEY.trim(),
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [
+              {
+                text: "You are Gemini inside a small glass panel called Dynamic Island. Reply in the user's language. Keep most answers under 80 words unless the user asks for more.",
+              },
+            ],
+          },
+          contents,
+          generationConfig: { maxOutputTokens: 400, temperature: 0.7 },
+        }),
+        signal: AbortSignal.timeout(20000),
+      },
+    );
+    lastStatus = response.status;
+    if (response.status === 404) continue;
+    if (!response.ok) return { error: "unreachable", status: 502 };
+    const data = await response.json();
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((part) => (typeof part.text === "string" ? part.text : ""))
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+    if (!text) return { error: "unreachable", status: 502 };
+    return { text };
+  }
+  return { error: "unreachable", status: lastStatus === 404 ? 502 : lastStatus };
+}
+
+function cleanMessages(body) {
+  if (!body || !Array.isArray(body.messages)) return null;
+  const messages = body.messages.slice(-8).flatMap((message) => {
+    if (!message || (message.role !== "user" && message.role !== "model")) return [];
+    if (typeof message.text !== "string") return [];
+    const text = message.text.trim().slice(0, 2000);
+    if (!text) return [];
+    return [{ role: message.role, text }];
+  });
+  if (!messages.length || messages.at(-1).role !== "user") return null;
+  return messages;
+}
+
 export async function handleApi(request) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/")) return null;
@@ -265,6 +345,37 @@ export async function handleApi(request) {
   const secure = secureRequest(request);
   const cookies = readCookies(request);
   const credentials = client();
+
+  if (url.pathname === "/api/gemini" && request.method === "GET") {
+    return json({ configured: geminiReady() });
+  }
+
+  if (url.pathname === "/api/gemini" && request.method === "POST") {
+    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    if (!geminiReady()) return json({ error: "not_configured" }, { status: 404 });
+    if (geminiLimited(request)) return json({ error: "busy" }, { status: 429 });
+    const messages = cleanMessages(await request.json().catch(() => null));
+    if (!messages) return json({ error: "bad_request" }, { status: 400 });
+    try {
+      const result = await askGemini(messages);
+      if (result.error) return json({ error: result.error }, { status: result.status });
+      return json({ text: result.text });
+    } catch {
+      return json({ error: "unreachable" }, { status: 502 });
+    }
+  }
+
+  if (url.pathname === "/api/brightness" && request.method === "GET") {
+    const level = await readBrightness();
+    return json({ supported: brightnessSupported() && level != null, level });
+  }
+
+  if (url.pathname === "/api/brightness" && request.method === "POST") {
+    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    const body = await request.json().catch(() => null);
+    const level = await writeBrightness(body?.level);
+    return json({ supported: brightnessSupported() && level != null, level });
+  }
 
   if (url.pathname === "/api/auth/google" && request.method === "GET") {
     if (!credentials) return json({ error: "not_configured" }, { status: 404 });
@@ -352,7 +463,25 @@ export async function handleApi(request) {
   return json({ error: "not_found" }, { status: 404 });
 }
 
-export function toWebRequest(req) {
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > 32_000) {
+        reject(new Error("too_large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+export async function toWebRequest(req) {
   const forwarded = req.headers["x-forwarded-proto"];
   const proto = String(Array.isArray(forwarded) ? forwarded[0] : forwarded ?? "http")
     .split(",")[0]
@@ -366,7 +495,9 @@ export function toWebRequest(req) {
     if (Array.isArray(value)) value.forEach((item) => headers.append(key, item));
     else headers.set(key, value);
   }
-  return new Request(url, { method: req.method, headers });
+  const method = req.method ?? "GET";
+  const body = method === "GET" || method === "HEAD" ? undefined : await readBody(req);
+  return new Request(url, { method, headers, body: body?.length ? body : undefined });
 }
 
 export async function writeNodeResponse(res, response) {

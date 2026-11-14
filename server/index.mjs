@@ -27,7 +27,7 @@ function fileFor(pathname) {
 
 const server = createServer(async (req, res) => {
   try {
-    const request = toWebRequest(req);
+    const request = await toWebRequest(req);
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
       const response = await handleApi(request);

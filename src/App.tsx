@@ -4,20 +4,23 @@ import { Island } from "./island/Island.tsx";
 import { frameFor } from "./island/data.ts";
 import { mastHeight } from "./island/format.ts";
 import type { Compact, PeekId, View } from "./island/types.ts";
-import { useEditing, useFocus, useMusic, useNow, useViewport } from "./island/useActivities.ts";
+import { useMusic, useNow, useViewport } from "./island/useActivities.ts";
+import { useBrightness } from "./island/useBrightness.ts";
+import { useGemini } from "./island/useGemini.ts";
+import { useRadio } from "./island/useRadio.ts";
 import { Room } from "./scene/Room.tsx";
 
 export default function App() {
   const viewport = useViewport();
   const now = useNow();
   const music = useMusic();
-  const focus = useFocus();
+  const radio = useRadio();
+  const gemini = useGemini();
+  const brightness = useBrightness();
   const [opened] = useState(() => new URLSearchParams(window.location.search).get("open"));
   const [view, setView] = useState<View>(() => (opened === "mail" ? "peek" : "idle"));
   const [peek, setPeek] = useState<PeekId>(() => (opened === "mail" ? "mail" : "plus"));
-  const [dim, setDim] = useState(false);
   const [deviceHere, setDeviceHere] = useState(true);
-  const editing = useEditing(view === "claude");
   const { live, disconnect } = useLive();
   const celsius = useWeather();
   const { photos, add: addPhotos } = usePhotos();
@@ -26,14 +29,8 @@ export default function App() {
   const unread = live.mail.source === "google" ? live.mail.messages.filter((message) => message.unread).length : 0;
   const upcoming = live.calendar.source === "google" ? soonEvent(live.calendar.events, now) : null;
 
-  const compact: Compact = compactFor(
-    focus.running,
-    focus.done,
-    music.playing,
-    editing.live,
-    unread,
-    upcoming?.title ?? "",
-  );
+  const compact: Compact = compactFor(radio.playing, music.playing, unread, upcoming?.title ?? "");
+  const dim = brightness.level != null && brightness.level <= 30;
   const mast = mastHeight(viewport.h);
   const frame = frameFor(view, compact, viewport.w, viewport.h, mast, peek);
 
@@ -55,26 +52,34 @@ export default function App() {
       }
       if (event.key === "1") setView("home");
       if (event.key === "2") setView("music");
-      if (event.key === "3") setView("claude");
-      if (event.key === "4") setView("focus");
+      if (event.key === "3") setView("gemini");
+      if (event.key === "4") setView("radio");
       if (event.key === " ") {
         if (view === "music") {
           event.preventDefault();
+          if (!music.playing) radio.stop();
           music.toggle();
-        } else if (view === "focus") {
+        } else if (view === "radio") {
           event.preventDefault();
-          if (focus.running) focus.pause();
-          else focus.start();
+          if (!radio.playing) music.pause();
+          radio.toggle();
         }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view, music, focus]);
+  }, [view, music, radio]);
 
   const openMusic = () => {
+    radio.stop();
     music.play();
     setView("music");
+  };
+
+  const openRadio = () => {
+    music.pause();
+    radio.play();
+    setView("radio");
   };
 
   return (
@@ -103,8 +108,9 @@ export default function App() {
           frame={frame}
           now={now}
           music={music}
-          focus={focus}
-          editing={editing}
+          radio={radio}
+          gemini={gemini}
+          brightness={brightness}
           deviceHere={deviceHere}
           onToggleDevice={() => setDeviceHere((value) => !value)}
           onOpen={setView}
@@ -113,12 +119,12 @@ export default function App() {
             setView("peek");
           }}
           onMoon={() => {
-            setDim((value) => !value);
             setPeek("moon");
             setView("peek");
           }}
           onClose={() => setView("idle")}
           onMusic={openMusic}
+          onRadio={openRadio}
           live={live}
           celsius={celsius}
           photos={photos}
@@ -132,7 +138,7 @@ export default function App() {
           onDisconnect={() => void disconnect()}
         />
       </div>
-      <p className="keys">Esc closes · 1 Home · 2 Music · 3 Claude · 4 Focus</p>
+      <p className="keys">Esc closes · 1 Home · 2 Music · 3 Gemini · 4 Radio</p>
       <p className="sr-only" aria-live="polite">
         {view === "idle" ? "Dynamic Island closed" : `Dynamic Island showing ${view}`}
       </p>
@@ -140,18 +146,10 @@ export default function App() {
   );
 }
 
-function compactFor(
-  focusRunning: boolean,
-  focusDone: boolean,
-  musicPlaying: boolean,
-  editing: boolean,
-  unread: number,
-  eventTitle: string,
-): Compact {
-  if (focusRunning || focusDone) return "focus";
+function compactFor(radioOn: boolean, musicPlaying: boolean, unread: number, eventTitle: string): Compact {
+  if (radioOn) return "radio";
   if (musicPlaying) return "music";
   if (unread > 0) return "mail";
   if (eventTitle) return "event";
-  if (editing) return "claude";
   return "eyes";
 }

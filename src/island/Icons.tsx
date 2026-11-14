@@ -52,11 +52,13 @@ export function NoteIcon() {
   );
 }
 
-export function FocusIcon() {
+export function RadioIcon() {
   return (
     <Glyph>
-      <circle cx="12" cy="12" r="6.5" />
-      <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+      <rect x="4" y="8" width="16" height="11" rx="2" />
+      <path d="M8 8 14.5 3.5" />
+      <circle cx="9" cy="13.5" r="1.4" fill="currentColor" stroke="none" />
+      <path d="M13 12.2h4M13 15h3" />
     </Glyph>
   );
 }

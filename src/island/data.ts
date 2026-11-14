@@ -96,17 +96,18 @@ export function frameFor(
     if (compact === "music") return { width: Math.min(236, wide), height: 44, radius: 22 };
     if (compact === "event") return { width: Math.min(220, wide), height: 44, radius: 22 };
     if (compact === "mail") return { width: Math.min(132, wide), height: 44, radius: 22 };
-    if (compact === "focus") return { width: Math.min(148, wide), height: 44, radius: 22 };
-    if (compact === "claude") return { width: Math.min(148, wide), height: 44, radius: 22 };
+    if (compact === "radio") return { width: Math.min(220, wide), height: 44, radius: 22 };
     return { width: 126, height: 40, radius: 22 };
   }
   if (view === "peek") {
+    if (peek === "moon") return fit(narrow ? 320 : 260, 30);
     const tall = peek === "mail" || peek === "calendar" || peek === "photos" || peek === "phone" || peek === "messages" || peek === "plus";
     if (!tall) return fit(narrow ? 220 : 188, 30);
     return fit(narrow ? 460 : 360, 30);
   }
   if (view === "home") return fit(narrow ? 508 : 292, narrow ? 28 : 36);
   if (view === "music") return fit(narrow ? 492 : 328, 36);
-  if (view === "claude") return fit(narrow ? 372 : 312, 36);
+  if (view === "gemini") return fit(narrow ? 520 : 420, 36);
+  if (view === "radio") return fit(narrow ? 460 : 340, 36);
   return fit(narrow ? 312 : 280, 36);
 }

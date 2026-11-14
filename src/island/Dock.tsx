@@ -1,7 +1,6 @@
 import {
   CalendarIcon,
   ChatIcon,
-  FocusIcon,
   HomeIcon,
   MailIcon,
   MoonIcon,
@@ -9,6 +8,7 @@ import {
   PhoneIcon,
   PhotoIcon,
   PlusIcon,
+  RadioIcon,
   SparkIcon,
 } from "./Icons.tsx";
 import type { PeekId, View } from "./types.ts";
@@ -16,15 +16,15 @@ import type { PeekId, View } from "./types.ts";
 type DockItem = {
   id: string;
   label: string;
-  icon: "plus" | "home" | "claude" | "music" | "focus" | "messages" | "moon" | "phone" | "photos" | "calendar" | "mail";
+  icon: "plus" | "home" | "gemini" | "music" | "radio" | "messages" | "moon" | "phone" | "photos" | "calendar" | "mail";
 };
 
 const items: DockItem[] = [
   { id: "plus-left", label: "Activities", icon: "plus" },
   { id: "home", label: "Home", icon: "home" },
-  { id: "claude", label: "Claude", icon: "claude" },
+  { id: "gemini", label: "Gemini", icon: "gemini" },
   { id: "music", label: "Music", icon: "music" },
-  { id: "focus", label: "Focus", icon: "focus" },
+  { id: "radio", label: "Radio", icon: "radio" },
   { id: "messages", label: "Messages", icon: "messages" },
   { id: "moon", label: "Lights", icon: "moon" },
   { id: "phone", label: "Phone", icon: "phone" },
@@ -37,9 +37,9 @@ const items: DockItem[] = [
 const icons = {
   plus: PlusIcon,
   home: HomeIcon,
-  claude: SparkIcon,
+  gemini: SparkIcon,
   music: NoteIcon,
-  focus: FocusIcon,
+  radio: RadioIcon,
   messages: ChatIcon,
   moon: MoonIcon,
   phone: PhoneIcon,
@@ -69,9 +69,9 @@ export function Dock({
         const Icon = icons[item.icon];
         const current =
           (item.icon === "home" && view === "home") ||
-          (item.icon === "claude" && view === "claude") ||
+          (item.icon === "gemini" && view === "gemini") ||
           (item.icon === "music" && view === "music") ||
-          (item.icon === "focus" && view === "focus") ||
+          (item.icon === "radio" && view === "radio") ||
           (item.icon === "plus" && view === "peek" && peek === "plus") ||
           (item.icon !== "plus" &&
             item.icon !== "moon" &&
@@ -89,9 +89,9 @@ export function Dock({
             aria-pressed={item.icon === "moon" ? dim : undefined}
             onClick={() => {
               if (item.icon === "home") onOpen("home");
-              else if (item.icon === "claude") onOpen("claude");
+              else if (item.icon === "gemini") onOpen("gemini");
               else if (item.icon === "music") onOpen("music");
-              else if (item.icon === "focus") onOpen("focus");
+              else if (item.icon === "radio") onOpen("radio");
               else if (item.icon === "moon") onMoon();
               else if (item.icon === "plus") onPeek("plus");
               else onPeek(item.icon);

@@ -1,4 +1,4 @@
-export type View = "idle" | "home" | "music" | "claude" | "focus" | "peek";
+export type View = "idle" | "home" | "music" | "gemini" | "radio" | "peek";
 
 export type PeekId =
   | "plus"
@@ -9,9 +9,7 @@ export type PeekId =
   | "calendar"
   | "mail";
 
-export type Compact = "eyes" | "music" | "focus" | "claude" | "mail" | "event";
-
-export type ClaudeTab = "read" | "edit" | "test" | "done";
+export type Compact = "eyes" | "music" | "radio" | "mail" | "event";
 
 export type CoverTheme = "day" | "gold" | "dusk";
 

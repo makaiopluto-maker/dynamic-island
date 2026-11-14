@@ -5,13 +5,18 @@ import type { IslandContact, IslandNotice, IslandPhoto, LiveState } from "./desk
 import { Dock } from "./Dock.tsx";
 import { PeekView } from "./peeks.tsx";
 import { StatusBar } from "./StatusBar.tsx";
+import { GeminiView, RadioView } from "./panels.tsx";
 import type { Compact, Frame, PeekId, View } from "./types.ts";
-import type { useEditing, useFocus, useMusic } from "./useActivities.ts";
-import { ClaudeView, CompactFace, FocusView, HomeView, MusicView } from "./views.tsx";
+import type { useMusic } from "./useActivities.ts";
+import type { useBrightness } from "./useBrightness.ts";
+import type { useGemini } from "./useGemini.ts";
+import type { useRadio } from "./useRadio.ts";
+import { CompactFace, HomeView, MusicView } from "./views.tsx";
 
 type Music = ReturnType<typeof useMusic>;
-type Focus = ReturnType<typeof useFocus>;
-type Editing = ReturnType<typeof useEditing>;
+type Radio = ReturnType<typeof useRadio>;
+type Gemini = ReturnType<typeof useGemini>;
+type Brightness = ReturnType<typeof useBrightness>;
 
 export function Island({
   view,
@@ -21,8 +26,9 @@ export function Island({
   frame,
   now,
   music,
-  focus,
-  editing,
+  radio,
+  gemini,
+  brightness,
   deviceHere,
   onToggleDevice,
   onOpen,
@@ -30,6 +36,7 @@ export function Island({
   onMoon,
   onClose,
   onMusic,
+  onRadio,
   live,
   celsius,
   photos,
@@ -49,8 +56,9 @@ export function Island({
   frame: Frame;
   now: Date;
   music: Music;
-  focus: Focus;
-  editing: Editing;
+  radio: Radio;
+  gemini: Gemini;
+  brightness: Brightness;
   deviceHere: boolean;
   onToggleDevice: () => void;
   onOpen: (view: View) => void;
@@ -58,6 +66,7 @@ export function Island({
   onMoon: () => void;
   onClose: () => void;
   onMusic: () => void;
+  onRadio: () => void;
   live: LiveState;
   celsius: number | null;
   photos: IslandPhoto[];
@@ -82,8 +91,7 @@ export function Island({
       <CompactFace
         compact={compact}
         music={music}
-        focus={focus}
-        editingSeconds={editing.seconds}
+        radio={radio}
         onOpen={onOpen}
         onPeek={onPeek}
         mailCount={mailCount}
@@ -94,39 +102,33 @@ export function Island({
     stage = (
       <HomeView
         music={music}
-        focus={focus}
-        editingSeconds={editing.seconds}
+        radio={radio}
+        geminiLine={gemini.lastReply ? gemini.lastReply.slice(0, 42) : "In this island"}
         onMusic={onMusic}
-        onClaude={() => onOpen("claude")}
-        onFocus={() => onOpen("focus")}
+        onGemini={() => onOpen("gemini")}
+        onRadio={onRadio}
       />
     );
   } else if (view === "music") {
     stage = (
       <MusicView music={music} deviceHere={deviceHere} onToggleDevice={onToggleDevice} />
     );
-  } else if (view === "claude") {
-    stage = (
-      <ClaudeView
-        seconds={editing.seconds}
-        tab={editing.tab}
-        snippetIndex={editing.snippet}
-        onTab={editing.setTab}
-      />
-    );
-  } else if (view === "focus") {
-    stage = <FocusView focus={focus} now={now} />;
+  } else if (view === "gemini") {
+    stage = <GeminiView gemini={gemini} />;
+  } else if (view === "radio") {
+    stage = <RadioView radio={radio} />;
   } else {
     stage = (
       <PeekView
         id={peek}
-        dim={dim}
         now={now}
         live={live}
         photos={photos}
         contacts={contacts}
         notices={notices}
         contactsSupported={contactsSupported}
+        brightness={brightness}
+        onBrightness={brightness.set}
         onAddPhotos={onAddPhotos}
         onPickContacts={onPickContacts}
         onDisconnect={onDisconnect}
@@ -186,8 +188,8 @@ export function Island({
 }
 
 function glowFor(view: View, compact: Compact) {
-  if (view === "claude" || (view === "idle" && compact === "claude")) return "255, 148, 72";
-  if (view === "focus" || (view === "idle" && compact === "focus")) return "154, 124, 255";
+  if (view === "gemini") return "110, 150, 255";
+  if (view === "radio" || (view === "idle" && compact === "radio")) return "255, 150, 80";
   if (view === "music" || (view === "idle" && compact === "music")) return "255, 122, 96";
   if (view === "idle" && compact === "mail") return "255, 140, 90";
   if (view === "idle" && compact === "event") return "120, 186, 255";

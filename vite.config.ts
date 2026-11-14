@@ -11,7 +11,7 @@ function islandApi(): Plugin {
         return;
       }
       try {
-        const response = await handleApi(toWebRequest(req));
+        const response = await handleApi(await toWebRequest(req));
         if (!response) {
           next();
           return;
