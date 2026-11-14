@@ -48,16 +48,11 @@ function loadSaved(): Station[] {
   }
 }
 
-function isHls(url: string) {
-  return /\.m3u8(\?|$)/i.test(url);
-}
-
 export function useRadio() {
   const audio = useRef<HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const tunedId = useRef<string | null>(null);
   const ticket = useRef(0);
-  const resolved = useRef(new Map<string, { url: string; at: number }>());
   const [saved, setSaved] = useState<Station[]>(loadSaved);
   const stations = useMemo(() => [...builtIn(), ...saved], [saved]);
   const stationsRef = useRef(stations);
@@ -178,40 +173,21 @@ export function useRadio() {
       playNode(node);
       return;
     }
+    const url = `/api/radio/live.m3u8?id=${encodeURIComponent(station.id)}`;
+    setTuning(true);
     void (async () => {
-      let url = "";
-      const cached = resolved.current.get(station.id);
-      if (cached && Date.now() - cached.at < 60_000) url = cached.url;
-      else {
-        setTuning(true);
-        try {
-          const response = await fetch(`/api/radio/tune?id=${encodeURIComponent(station.id)}`);
-          const body = (await response.json()) as { url?: string };
-          if (!response.ok || !body.url?.startsWith("https://")) throw new Error("tune");
-          url = body.url;
-          resolved.current.set(station.id, { url, at: Date.now() });
-        } catch {
-          if (mine === ticket.current) {
-            setTuning(false);
-            setFailed(true);
-            setPlaying(false);
-          }
-          return;
-        }
-      }
-      if (mine !== ticket.current || !url) return;
-      setTuning(false);
       try {
-        if (isHls(url)) await attachHls(node, station.id, url);
-        else attachDirect(node, station.id, url);
+        await attachHls(node, station.id, url);
       } catch {
         if (mine === ticket.current) {
+          setTuning(false);
           setFailed(true);
           setPlaying(false);
         }
         return;
       }
       if (mine !== ticket.current) return;
+      setTuning(false);
       playNode(node);
     })();
   }, [attachDirect, attachHls, playNode]);

@@ -689,41 +689,143 @@ function mapStation(item, progressive = false) {
   return { id, name, detail: place || "Live", url };
 }
 
-function scoreStation(station, query) {
-  const name = station.name.toLowerCase();
-  const needle = query.toLowerCase();
-  let score = name === needle ? 6 : name.includes(needle) ? 3 : 1;
-  if (/안동|충북|대구|부산|광주|제주|전주|창원|포항|울산|춘천/.test(station.name)) score -= 3;
-  return score;
-}
+const MEDIA_HOSTS = ["gscdn.kbs.co.kr", "imbc.com", "sbs.co.kr", "cbs.co.kr", "ytn.co.kr", "nowcdn.co.kr", "tbs.seoul.kr"];
 
-async function streamPlays(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6000);
+const FIXED_LIVE = {
+  "939": "https://m-aac.cbs.co.kr/cbs939/_definst_/cbs939.stream/playlist.m3u8",
+  "945": "https://radiolive.ytn.co.kr/radio/_definst_/20211118_fmlive/playlist.m3u8",
+  "991": "https://mgugaklive.nowcdn.co.kr/gugakradio/gugakradio.stream/playlist.m3u8",
+  "1013": "https://cdnefm.tbs.seoul.kr/tbs/_definst_/tbs_efm_web_360.smil/playlist.m3u8",
+};
+
+function mediaUrl(value) {
+  if (typeof value !== "string") return null;
+  let url;
   try {
-    const response = await fetch(url, {
-      headers: { "user-agent": "Mozilla/5.0", range: "bytes=0-256" },
-      redirect: "follow",
-      signal: controller.signal,
-    });
-    if (!response.ok || !response.body) return false;
-    const reader = response.body.getReader();
-    const { value } = await reader.read();
-    await reader.cancel().catch(() => {});
-    if (!value?.length) return false;
-    const head = Buffer.from(value.subarray(0, 12)).toString("utf8");
-    if (head.startsWith("#EXT") || head.startsWith("OggS") || head.startsWith("ID3")) return true;
-    if (value[0] === 0xff && (value[1] & 0xe0) === 0xe0) return true;
-    const type = response.headers.get("content-type") ?? "";
-    return type.includes("mpegurl") || type.startsWith("audio/");
+    url = new URL(value);
   } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
+    return null;
   }
+  if (url.protocol !== "https:" || url.username || url.password) return null;
+  const host = url.hostname.toLowerCase();
+  if (!MEDIA_HOSTS.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) return null;
+  if (!/\.(m3u8|aac|ts|m4s|mp3|mp4)$/i.test(url.pathname)) return null;
+  return url;
 }
 
-const playable = new Map();
+function mediaHeaders(url) {
+  const headers = { "user-agent": "Mozilla/5.0", accept: "*/*" };
+  const host = url.hostname.toLowerCase();
+  if (host.endsWith("kbs.co.kr")) headers.referer = "https://radio.kbs.co.kr/";
+  else if (host.endsWith("imbc.com")) headers.referer = "https://mini.imbc.com/";
+  else if (host.endsWith("sbs.co.kr")) headers.referer = "https://www.sbs.co.kr/";
+  return headers;
+}
+
+function rewritePlaylist(text, base) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+      if (trimmed.startsWith("#")) {
+        return line.replace(/URI="([^"]+)"/g, (match, uri) => {
+          const next = mediaUrl(new URL(uri, base).toString());
+          if (!next) return match;
+          return `URI="/api/radio/seg?u=${encodeURIComponent(next.toString())}"`;
+        });
+      }
+      const next = mediaUrl(new URL(trimmed, base).toString());
+      if (!next) return "";
+      return `/api/radio/seg?u=${encodeURIComponent(next.toString())}`;
+    })
+    .join("\n");
+}
+
+async function fetchMedia(target) {
+  let current = target;
+  for (let hop = 0; hop < 3; hop += 1) {
+    const response = await fetch(current, {
+      headers: mediaHeaders(new URL(current)),
+      redirect: "manual",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const next = mediaUrl(new URL(response.headers.get("location") ?? "", current).toString());
+      if (!next) return null;
+      current = next.toString();
+      continue;
+    }
+    if (!response.ok) return null;
+    const finalUrl = mediaUrl(response.url || current);
+    if (!finalUrl) return null;
+    return { response, url: finalUrl.toString() };
+  }
+  return null;
+}
+
+async function readSource(url) {
+  const parsed = new URL(url);
+  const allowed = parsed.protocol === "https:" && ["cfpwwwapi.kbs.co.kr", "sminiplay.imbc.com", "apis.sbs.co.kr"].includes(parsed.hostname);
+  if (!allowed) return null;
+  const response = await fetch(parsed, {
+    headers: { "user-agent": "Mozilla/5.0", accept: "*/*" },
+    redirect: "manual",
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) return null;
+  return response.text();
+}
+
+async function upstreamFor(id) {
+  if (FIXED_LIVE[id]) return FIXED_LIVE[id];
+  if (id === "891" || id === "931" || id === "1061") {
+    const code = id === "891" ? "25" : id === "931" ? "24" : "22";
+    const text = await readSource(`https://cfpwwwapi.kbs.co.kr/api/v1/landing/live/channel_code/${code}`);
+    if (!text) return null;
+    const data = JSON.parse(text);
+    return mediaUrl(data?.channel_item?.[0]?.service_url)?.toString() ?? null;
+  }
+  if (id === "919" || id === "959") {
+    const channel = id === "919" ? "mfm" : "sfm";
+    const text = await readSource(`https://sminiplay.imbc.com/aacplay.ashx?agent=webapp&channel=${channel}`);
+    return mediaUrl(text?.trim())?.toString() ?? null;
+  }
+  if (id === "1035" || id === "1077") {
+    const path = id === "1077" ? "powerpc/powerfm" : "lovepc/lovefm";
+    const text = await readSource(`https://apis.sbs.co.kr/play-api/1.0/livestream/${path}?protocol=hls&ssl=Y`);
+    return mediaUrl(text?.trim())?.toString() ?? null;
+  }
+  return null;
+}
+
+const mediaCache = new Map();
+
+async function livePlaylist(id) {
+  const cached = mediaCache.get(id);
+  if (cached && Date.now() - cached.at < 45_000) {
+    const got = await fetchMedia(cached.url);
+    if (got) return { url: got.url, text: await got.response.text() };
+    mediaCache.delete(id);
+  }
+  let start = await upstreamFor(id);
+  if (!start) return null;
+  let got = await fetchMedia(start);
+  if (!got) return null;
+  let text = await got.response.text();
+  if (!text.startsWith("#EXT")) return null;
+  if (text.includes("#EXT-X-STREAM-INF")) {
+    const line = text.split(/\r?\n/).map((item) => item.trim()).find((item) => item && !item.startsWith("#"));
+    const next = line ? mediaUrl(new URL(line, got.url).toString()) : null;
+    if (!next) return null;
+    got = await fetchMedia(next.toString());
+    if (!got) return null;
+    text = await got.response.text();
+    if (!text.startsWith("#EXT") || text.includes("#EXT-X-STREAM-INF")) return null;
+  }
+  mediaCache.set(id, { url: got.url, at: Date.now() });
+  return { url: got.url, text };
+}
 
 async function findStations(query, progressive = false) {
   const url = new URL("https://de1.api.radio-browser.info/json/stations/search");
@@ -901,23 +1003,51 @@ export async function handleApi(request) {
     }
   }
 
-  if (url.pathname === "/api/radio/tune" && request.method === "GET") {
-    if (writeLimited(viewer.sub, "radio", 30)) return json({ error: "busy" }, { status: 429 });
+  if (url.pathname === "/api/radio/live.m3u8" && request.method === "GET") {
+    if (writeLimited(viewer.sub, "radio-live", 40)) return json({ error: "busy" }, { status: 429 });
     const station = dial.find((item) => item.id === url.searchParams.get("id"));
     if (!station) return json({ error: "bad_request" }, { status: 400 });
     try {
-      const cached = playable.get(station.id);
-      if (cached && Date.now() - cached.at < 120_000) return json({ id: station.id, name: cached.name, url: cached.url });
-      const found = (await findStations(station.query)).sort((a, b) => scoreStation(b, station.query) - scoreStation(a, station.query));
-      for (const candidate of found.slice(0, 4)) {
-        if (!(await streamPlays(candidate.url))) continue;
-        playable.set(station.id, { at: Date.now(), name: candidate.name, url: candidate.url });
-        return json({ id: station.id, name: candidate.name, url: candidate.url });
-      }
-      return json({ error: "unreachable" }, { status: 502 });
+      const playlist = await livePlaylist(station.id);
+      if (!playlist) return json({ error: "unreachable" }, { status: 502 });
+      return new Response(rewritePlaylist(playlist.text, playlist.url), {
+        headers: {
+          "content-type": "application/vnd.apple.mpegurl",
+          "cache-control": "no-store",
+        },
+      });
     } catch {
       return json({ error: "unreachable" }, { status: 502 });
     }
+  }
+
+  if (url.pathname === "/api/radio/seg" && request.method === "GET") {
+    if (writeLimited(viewer.sub, "radio-seg", 180)) return json({ error: "busy" }, { status: 429 });
+    const target = mediaUrl(url.searchParams.get("u") ?? "");
+    if (!target) return json({ error: "bad_request" }, { status: 400 });
+    try {
+      const got = await fetchMedia(target.toString());
+      if (!got) return json({ error: "unreachable" }, { status: 502 });
+      if (got.url.includes(".m3u8")) {
+        const text = await got.response.text();
+        if (!text.startsWith("#EXT")) return json({ error: "unreachable" }, { status: 502 });
+        return new Response(rewritePlaylist(text, got.url), {
+          headers: { "content-type": "application/vnd.apple.mpegurl", "cache-control": "no-store" },
+        });
+      }
+      const type = got.response.headers.get("content-type") || (got.url.includes(".aac") ? "audio/aac" : "application/octet-stream");
+      return new Response(got.response.body, {
+        headers: { "content-type": type, "cache-control": "no-store" },
+      });
+    } catch {
+      return json({ error: "unreachable" }, { status: 502 });
+    }
+  }
+
+  if (url.pathname === "/api/radio/tune" && request.method === "GET") {
+    const station = dial.find((item) => item.id === url.searchParams.get("id"));
+    if (!station) return json({ error: "bad_request" }, { status: 400 });
+    return json({ id: station.id, name: station.name, url: `/api/radio/live.m3u8?id=${station.id}` });
   }
 
   if (url.pathname === "/api/radio/search" && request.method === "GET") {
