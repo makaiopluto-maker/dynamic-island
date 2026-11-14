@@ -75,25 +75,101 @@ export function useLive() {
   return { live, disconnect };
 }
 
+export type IslandHour = { label: string; celsius: number };
+
+export type IslandWeather = {
+  celsius: number;
+  summary: string;
+  high: number;
+  low: number;
+  hours: IslandHour[];
+};
+
+type Forecast = {
+  current?: { temperature_2m?: number; weather_code?: number };
+  hourly?: { time?: string[]; temperature_2m?: number[] };
+  daily?: { temperature_2m_max?: number[]; temperature_2m_min?: number[] };
+};
+
+function weatherSummary(code: number) {
+  if (code === 0) return "Clear";
+  if (code === 1) return "Mostly clear";
+  if (code === 2) return "Partly cloudy";
+  if (code === 3) return "Overcast";
+  if (code === 45 || code === 48) return "Fog";
+  if (code >= 51 && code <= 57) return "Drizzle";
+  if (code >= 61 && code <= 67) return "Rain";
+  if (code >= 71 && code <= 77) return "Snow";
+  if (code >= 80 && code <= 82) return "Showers";
+  if (code >= 85 && code <= 86) return "Snow showers";
+  if (code >= 95) return "Storm";
+  return "Seoul";
+}
+
+function readForecast(body: Forecast): IslandWeather | null {
+  const temp = body.current?.temperature_2m;
+  const code = body.current?.weather_code;
+  const high = body.daily?.temperature_2m_max?.[0];
+  const low = body.daily?.temperature_2m_min?.[0];
+  const times = body.hourly?.time ?? [];
+  const temps = body.hourly?.temperature_2m ?? [];
+  if (typeof temp !== "number" || typeof code !== "number" || typeof high !== "number" || typeof low !== "number") {
+    return null;
+  }
+  const stamp = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).replace(" ", "T").slice(0, 13);
+  const index = times.findIndex((time) => time.slice(0, 13) >= stamp);
+  const start = index < 0 ? 0 : index;
+  const hours = times.slice(start, start + 6).flatMap((time, offset) => {
+    const value = temps[start + offset];
+    if (typeof value !== "number") return [];
+    return [{ label: time.slice(11, 13), celsius: Math.round(value) }];
+  });
+  return {
+    celsius: Math.round(temp),
+    summary: weatherSummary(code),
+    high: Math.round(high),
+    low: Math.round(low),
+    hours,
+  };
+}
+
 export function useWeather() {
-  const [celsius, setCelsius] = useState<number | null>(null);
+  const [current, setCurrent] = useState<IslandWeather | null>(null);
+  const [failed, setFailed] = useState(false);
+
   useEffect(() => {
-    const controller = new AbortController();
-    fetch(
-      "https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.9780&current=temperature_2m&timezone=Asia%2FSeoul",
-      { signal: controller.signal },
-    )
-      .then((response) => response.json())
-      .then((body: { current?: { temperature_2m?: number } }) => {
-        const value = body.current?.temperature_2m;
-        if (typeof value === "number") setCelsius(Math.round(value));
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-      });
-    return () => controller.abort();
+    let active = true;
+    const load = () => {
+      fetch(
+        "https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.9780&current=temperature_2m,weather_code&hourly=temperature_2m&daily=temperature_2m_max,temperature_2m_min&timezone=Asia%2FSeoul&forecast_days=2",
+      )
+        .then((response) => {
+          if (!response.ok) throw new Error("weather");
+          return response.json() as Promise<Forecast>;
+        })
+        .then((body) => {
+          if (!active) return;
+          const next = readForecast(body);
+          if (!next) {
+            setFailed(true);
+            return;
+          }
+          setCurrent(next);
+          setFailed(false);
+        })
+        .catch(() => {
+          if (active) setFailed(true);
+        });
+    };
+    load();
+    const id = window.setInterval(load, 15 * 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+    };
   }, []);
-  return celsius;
+
+  return { current, failed };
 }
 
 export type IslandPhoto = { id: string; url: string };
@@ -208,91 +284,6 @@ export function useContacts() {
   }, []);
 
   return { contacts, pick, supported: contactsSupported() };
-}
-
-const CHAT_KEY = "island-chats";
-
-export type IslandChatMessage = { id: string; text: string; at: string };
-export type IslandChat = { id: string; name: string; phone: string; messages: IslandChatMessage[] };
-
-export function smsAddress(raw: string) {
-  const compact = raw.replace(/[^\d+]/g, "");
-  if (compact.startsWith("+")) return compact.slice(0, 16);
-  const digits = compact.replace(/\D/g, "");
-  if (digits.length < 8) return "";
-  if (digits.startsWith("0")) return `+82${digits.slice(1)}`.slice(0, 16);
-  return digits.slice(0, 16);
-}
-
-function readChats(): IslandChat[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CHAT_KEY) ?? "[]") as IslandChat[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((chat) => {
-      if (typeof chat?.id !== "string" || typeof chat?.name !== "string" || !Array.isArray(chat.messages)) return [];
-      return [{ ...chat, phone: typeof chat.phone === "string" ? chat.phone : "" }];
-    });
-  } catch {
-    return [];
-  }
-}
-
-export function useChats() {
-  const [chats, setChats] = useState<IslandChat[]>(() => readChats());
-
-  const write = useCallback((next: IslandChat[]) => {
-    localStorage.setItem(CHAT_KEY, JSON.stringify(next));
-    setChats(next);
-  }, []);
-
-  const start = useCallback(
-    (name: string, phone: string, text: string) => {
-      const title = name.trim().slice(0, 40);
-      const address = smsAddress(phone);
-      const body = text.trim().slice(0, 500);
-      if (!title || !address || !body) return null;
-      const chat: IslandChat = {
-        id: crypto.randomUUID(),
-        name: title,
-        phone: address,
-        messages: [{ id: crypto.randomUUID(), text: body, at: new Date().toISOString() }],
-      };
-      write([chat, ...readChats()].slice(0, 30));
-      return chat.id;
-    },
-    [write],
-  );
-
-  const send = useCallback(
-    (id: string, text: string) => {
-      const body = text.trim().slice(0, 500);
-      if (!body) return;
-      const next = readChats().map((chat) =>
-        chat.id === id
-          ? {
-              ...chat,
-              messages: [...chat.messages, { id: crypto.randomUUID(), text: body, at: new Date().toISOString() }].slice(-80),
-            }
-          : chat,
-      );
-      const current = next.find((chat) => chat.id === id);
-      write(current ? [current, ...next.filter((chat) => chat.id !== id)] : next);
-    },
-    [write],
-  );
-
-  return { chats, start, send };
-}
-
-export async function deliverText(to: string, text: string) {
-  const response = await fetch("/api/sms", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ to, text }),
-  });
-  if (response.ok) return "sent" as const;
-  const body = (await response.json().catch(() => null)) as { error?: string } | null;
-  return body?.error === "not_configured" ? ("not_configured" as const) : ("failed" as const);
 }
 
 const NOTICE_KEY = "island-notices";

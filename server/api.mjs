@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { getIdentity } from "../cursor/identity.ts";
 import { sampleEvents, sampleMail, seoulDay } from "../shared/sample.mjs";
 import { brightnessSupported, readBrightness, writeBrightness } from "./brightness.mjs";
@@ -480,52 +480,6 @@ function geminiReady() {
   return Boolean(process.env.GEMINI_API_KEY?.trim());
 }
 
-const smsHits = new Map();
-
-function smsReady() {
-  return Boolean(process.env.SOLAPI_API_KEY?.trim() && process.env.SOLAPI_API_SECRET?.trim() && process.env.SOLAPI_SENDER?.trim());
-}
-
-function smsLimited(sub) {
-  const now = Date.now();
-  const recent = (smsHits.get(sub) ?? []).filter((stamp) => now - stamp < 60_000);
-  if (recent.length >= 8) return true;
-  recent.push(now);
-  smsHits.set(sub, recent);
-  return false;
-}
-
-function recipientDigits(raw) {
-  const compact = String(raw ?? "").replace(/[^\d+]/g, "");
-  const digits = compact.replace(/\D/g, "");
-  if (digits.length < 8 || digits.length > 15) return "";
-  if (compact.startsWith("+82") || (digits.startsWith("82") && digits.length >= 11)) return `0${digits.slice(2)}`;
-  return digits;
-}
-
-function solapiAuth() {
-  const date = new Date().toISOString();
-  const salt = randomBytes(16).toString("hex");
-  const signature = createHmac("sha256", process.env.SOLAPI_API_SECRET.trim()).update(date + salt).digest("hex");
-  return `HMAC-SHA256 apiKey=${process.env.SOLAPI_API_KEY.trim()}, date=${date}, salt=${salt}, signature=${signature}`;
-}
-
-async function sendSolapi(to, text) {
-  const from = (process.env.SOLAPI_SENDER ?? "").replace(/\D/g, "");
-  if (!from) return { error: "not_configured", status: 404 };
-  const response = await fetch("https://api.solapi.com/messages/v4/send", {
-    method: "POST",
-    headers: {
-      authorization: solapiAuth(),
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ message: { to, from, text, autoTypeDetect: true } }),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!response.ok) return { error: "unreachable", status: 502 };
-  return { ok: true };
-}
-
 async function askGemini(messages) {
   const contents = messages.map((message) => ({
     role: message.role,
@@ -593,23 +547,6 @@ export async function handleApi(request) {
   const secure = secureRequest(request);
   const cookies = readCookies(request);
   const credentials = client();
-
-  if (url.pathname === "/api/sms" && request.method === "POST") {
-    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
-    if (!smsReady()) return json({ error: "not_configured" }, { status: 404 });
-    if (smsLimited(viewer.sub)) return json({ error: "busy" }, { status: 429 });
-    const body = await request.json().catch(() => null);
-    const to = recipientDigits(body?.to);
-    const text = typeof body?.text === "string" ? body.text.trim().slice(0, 500) : "";
-    if (!to || !text) return json({ error: "bad_request" }, { status: 400 });
-    try {
-      const result = await sendSolapi(to, text);
-      if (result.error) return json({ error: result.error }, { status: result.status });
-      return json({ sent: true });
-    } catch {
-      return json({ error: "unreachable" }, { status: 502 });
-    }
-  }
 
   if (url.pathname === "/api/gemini" && request.method === "GET") {
     return json({ configured: geminiReady() });

@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
-import type { CalendarEvent, IslandChat, IslandContact, IslandPhoto, LiveState, MailMessage } from "./desk.ts";
-import { deliverText, formatWhen, useChats } from "./desk.ts";
+import { formatWhen, type CalendarEvent, type IslandContact, type IslandPhoto, type IslandWeather, type LiveState, type MailMessage, type useWeather } from "./desk.ts";
 import { seoulFace } from "./format.ts";
 import type { PeekId } from "./types.ts";
 import { useGooglePhotos } from "./useGooglePhotos.ts";
@@ -75,6 +74,7 @@ export function PeekView({
   id,
   now,
   live,
+  weather,
   photos,
   contacts,
   contactsSupported,
@@ -87,6 +87,7 @@ export function PeekView({
   id: PeekId;
   now: Date;
   live: LiveState;
+  weather: ReturnType<typeof useWeather>;
   photos: IslandPhoto[];
   contacts: IslandContact[];
   contactsSupported: boolean;
@@ -239,7 +240,7 @@ export function PeekView({
     );
   }
 
-  if (id === "messages") return <MessagesPeek />;
+  if (id === "weather") return <WeatherPeek live={live} weather={weather.current} failed={weather.failed} />;
 
   if (id === "plus") {
     return (
@@ -248,12 +249,11 @@ export function PeekView({
           <h2>Connected</h2>
         </div>
         <ul className="peek-scroll rows plain">
-          <li>Weather · Seoul, live</li>
+          <li>Weather · Seoul, with today’s events</li>
           <li>Mail · {live.connected ? live.account ?? "Google" : "sample until Google connects"}</li>
           <li>Calendar · {live.calendar.source === "google" ? "Google, today" : "sample until Google connects"}</li>
           <li>Photos · {live.connected ? "Google Photos" : "this device until Google connects"}</li>
           <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
-          <li>Messages · text to that number</li>
           <li>Music · {live.connected ? "YouTube Music" : "sample until Google connects"}</li>
           <li>Radio · live stations</li>
           <li>Gemini · in this island</li>
@@ -293,207 +293,48 @@ export function PeekView({
   );
 }
 
-function messageWhen(iso: string) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Seoul",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function MessagesPeek() {
-  const { chats, start, send } = useChats();
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [composing, setComposing] = useState(false);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const open = chats.find((chat) => chat.id === openId) ?? null;
-
-  const deliver = async (to: string, text: string) => {
-    setPending(true);
-    setError(null);
-    const result = await deliverText(to, text).catch(() => "failed" as const);
-    setPending(false);
-    if (result === "sent") return true;
-    setError(result === "not_configured" ? "Connect a sender number before a text can leave." : "The text did not go out.");
-    return false;
-  };
-
-  if (composing) {
-    return (
-      <form
-        className="peek stack"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (pending) return;
-          void deliver(phone, draft).then((ok) => {
-            if (!ok) return;
-            const id = start(name, phone, draft);
-            if (!id) return;
-            setName("");
-            setPhone("");
-            setDraft("");
-            setComposing(false);
-            setOpenId(id);
-          });
-        }}
-      >
-        <div className="peek-head">
-          <h2>New message</h2>
-          <button type="button" className="text-btn" onClick={() => setComposing(false)}>
-            Back
-          </button>
-        </div>
-        <input
-          className="chat-name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Name"
-          aria-label="Name"
-          maxLength={40}
-        />
-        <input
-          className="chat-name"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          placeholder="01000000000"
-          aria-label="Phone number"
-          inputMode="tel"
-          maxLength={20}
-        />
-        <textarea
-          className="chat-draft"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder="Message"
-          aria-label="Message"
-          maxLength={500}
-          rows={3}
-        />
-        <button type="submit" className="link-btn" disabled={pending}>
-          Send
-        </button>
-        {error ? <p className="fine">{error}</p> : null}
-      </form>
-    );
-  }
-
-  if (open) {
-    return (
-      <ChatThread
-        chat={open}
-        draft={draft}
-        pending={pending}
-        error={error}
-        onDraft={setDraft}
-        onBack={() => {
-          setError(null);
-          setOpenId(null);
-        }}
-        onSend={async (id, text) => {
-          const current = chats.find((chat) => chat.id === id);
-          if (!current || !(await deliver(current.phone, text))) return;
-          send(id, text);
-          setDraft("");
-        }}
-      />
-    );
-  }
-
-  return (
-    <div className="peek stack">
-      <div className="peek-head">
-        <h2>Messages</h2>
-        <span className="badge live">Island</span>
-      </div>
-      {chats.length ? (
-        <ul className="peek-scroll rows">
-          {chats.map((chat) => {
-            const last = chat.messages.at(-1);
-            return (
-              <li key={chat.id}>
-                <button type="button" className="row chat-row" onClick={() => setOpenId(chat.id)}>
-                  <i className="dot on" />
-                  <span>
-                    <strong>{chat.name}</strong>
-                    <em>{last?.text ?? "No message yet"}</em>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="fine">Send delivers the text to that number. This computer does not use a phone.</p>
-      )}
-      <button type="button" className="link-btn" onClick={() => setComposing(true)}>
-        New message
-      </button>
-    </div>
-  );
-}
-
-function ChatThread({
-  chat,
-  draft,
-  pending,
-  error,
-  onDraft,
-  onBack,
-  onSend,
+function WeatherPeek({
+  live,
+  weather,
+  failed,
 }: {
-  chat: IslandChat;
-  draft: string;
-  pending: boolean;
-  error: string | null;
-  onDraft: (value: string) => void;
-  onBack: () => void;
-  onSend: (id: string, text: string) => void;
+  live: LiveState;
+  weather: IslandWeather | null;
+  failed: boolean;
 }) {
   return (
     <div className="peek stack">
       <div className="peek-head">
-        <span>
-          <h2>{chat.name}</h2>
-          {chat.phone ? <p className="fine">{chat.phone}</p> : null}
-        </span>
-        <button type="button" className="text-btn" onClick={onBack}>
-          Back
-        </button>
+        <h2>Seoul</h2>
+        <span className={weather ? "badge live" : "badge"}>{weather ? "Live" : "Weather"}</span>
       </div>
-      <div className="thread peek-scroll">
-        {chat.messages.map((message) => (
-          <p key={message.id} className="bubble user">
-            {message.text}
-            <span className="bubble-time">{messageWhen(message.at)}</span>
+      {weather ? (
+        <>
+          <p className="temp-hero">
+            {weather.celsius}°<span>{weather.summary}</span>
           </p>
-        ))}
+          <p className="fine">
+            High {weather.high}° · Low {weather.low}°
+          </p>
+          {weather.hours.length ? (
+            <ol className="hours">
+              {weather.hours.map((hour) => (
+                <li key={hour.label}>
+                  <span>{hour.label}</span>
+                  <strong>{hour.celsius}°</strong>
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </>
+      ) : (
+        <p className="fine">{failed ? "Seoul weather didn’t load." : "Seoul weather is still loading."}</p>
+      )}
+      <div className="peek-head">
+        <h2>Today</h2>
+        <Badge source={live.calendar.source} />
       </div>
-      <form
-        className="ask"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (pending) return;
-          onSend(chat.id, draft);
-        }}
-      >
-        <input
-          value={draft}
-          onChange={(event) => onDraft(event.target.value)}
-          placeholder="Message"
-          aria-label={`Message ${chat.name}`}
-          maxLength={500}
-        />
-        <button type="submit" className="link-btn" disabled={pending}>
-          Send
-        </button>
-      </form>
-      {error ? <p className="fine">{error}</p> : null}
+      <EventList events={live.calendar.events} error={live.calendar.error} />
     </div>
   );
 }

@@ -24,7 +24,7 @@ export default function App() {
   const [view, setView] = useState<View>(() => (opened === "mail" ? "peek" : "idle"));
   const [peek, setPeek] = useState<PeekId>(() => (opened === "mail" ? "mail" : "plus"));
   const [deviceHere, setDeviceHere] = useState(true);
-  const celsius = useWeather();
+  const weather = useWeather();
   const { photos, add: addPhotos } = usePhotos();
   const { contacts, pick: pickContacts } = useContacts();
   const unread = live.mail.source === "google" ? live.mail.messages.filter((message) => message.unread).length : 0;
@@ -138,7 +138,7 @@ export default function App() {
           onMusic={openMusic}
           onRadio={openRadio}
           live={live}
-          celsius={celsius}
+          weather={weather}
           photos={photos}
           contacts={contacts}
           contactsSupported={contactsSupported()}

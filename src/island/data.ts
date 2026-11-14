@@ -102,7 +102,7 @@ export function frameFor(
   }
   if (view === "peek") {
     if (peek === "moon") return fit(narrow ? 320 : 260, 30);
-    const tall = peek === "mail" || peek === "calendar" || peek === "photos" || peek === "phone" || peek === "messages" || peek === "plus";
+    const tall = peek === "mail" || peek === "calendar" || peek === "photos" || peek === "phone" || peek === "weather" || peek === "plus";
     if (!tall) return fit(narrow ? 220 : 188, 30);
     return fit(narrow ? 460 : 360, 30);
   }

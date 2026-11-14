@@ -63,11 +63,11 @@ export function RadioIcon() {
   );
 }
 
-export function ChatIcon() {
+export function WeatherIcon() {
   return (
     <Glyph>
-      <path d="M5 15.2 3.8 18V7.2A1.8 1.8 0 0 1 5.6 5.4h7.2A1.8 1.8 0 0 1 14.6 7.2v6.2a1.8 1.8 0 0 1-1.8 1.8z" />
-      <path d="M9.2 12.2h6.4A1.8 1.8 0 0 1 17.4 14v4.2L15.8 17H9.2A1.8 1.8 0 0 1 7.4 15.2v-1.2A1.8 1.8 0 0 1 9.2 12.2z" />
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 3.2v2.1M12 18.7v2.1M3.2 12h2.1M18.7 12h2.1M5.7 5.7l1.5 1.5M16.8 16.8l1.5 1.5M18.3 5.7l-1.5 1.5M7.2 16.8l-1.5 1.5" />
     </Glyph>
   );
 }

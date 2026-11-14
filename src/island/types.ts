@@ -2,7 +2,7 @@ export type View = "idle" | "home" | "music" | "gemini" | "radio" | "peek";
 
 export type PeekId =
   | "plus"
-  | "messages"
+  | "weather"
   | "moon"
   | "phone"
   | "photos"

@@ -1031,18 +1031,39 @@ input:focus-visible {
 }
 .bubble.user { margin-left: auto; background: rgba(255, 255, 255, 0.16); }
 .bubble-time { display: block; margin-top: 4px; font-size: 10px; opacity: 0.6; }
-.chat-row { width: 100%; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.chat-name, .chat-draft {
-  width: 100%;
-  border: 0;
-  border-radius: 14px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.14);
-  color: white;
-  font: inherit;
-}
-.chat-draft { resize: none; }
 .bubble.model { background: rgba(90, 130, 255, 0.28); }
+.temp-hero {
+  margin: 0;
+  font-size: 48px;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+.temp-hero span {
+  margin-left: 10px;
+  font-size: 16px;
+  letter-spacing: 0;
+  font-weight: 560;
+  opacity: 0.8;
+}
+.hours {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+.hours li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.88;
+}
+.hours strong { font-size: 13px; font-weight: 650; }
 .ask { display: flex; gap: 8px; align-items: center; }
 .ask input {
   flex: 1;

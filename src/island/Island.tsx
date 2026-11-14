@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { CSSProperties, ReactNode } from "react";
 import { Cover } from "./Cover.tsx";
-import type { IslandContact, IslandPhoto, LiveState } from "./desk.ts";
+import type { IslandContact, IslandPhoto, LiveState, useWeather } from "./desk.ts";
 import { Dock } from "./Dock.tsx";
 import { PeekView } from "./peeks.tsx";
 import { StatusBar } from "./StatusBar.tsx";
@@ -41,7 +41,7 @@ export function Island({
   onMusic,
   onRadio,
   live,
-  celsius,
+  weather,
   photos,
   contacts,
   contactsSupported,
@@ -71,7 +71,7 @@ export function Island({
   onMusic: () => void;
   onRadio: () => void;
   live: LiveState;
-  celsius: number | null;
+  weather: ReturnType<typeof useWeather>;
   photos: IslandPhoto[];
   contacts: IslandContact[];
   contactsSupported: boolean;
@@ -130,6 +130,7 @@ export function Island({
         photos={photos}
         contacts={contacts}
         contactsSupported={contactsSupported}
+        weather={weather}
         brightness={brightness}
         onBrightness={brightness.set}
         onAddPhotos={onAddPhotos}
@@ -179,7 +180,7 @@ export function Island({
                   </motion.div>
                 </AnimatePresence>
               ) : null}
-              <StatusBar now={now} onClose={onClose} celsius={celsius} />
+              <StatusBar now={now} onClose={onClose} celsius={weather.current?.celsius ?? null} />
               <div className="stage">{stage}</div>
               <Dock view={view} peek={peek} dim={dim} onOpen={onOpen} onPeek={onPeek} onMoon={onMoon} />
             </>
