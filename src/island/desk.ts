@@ -72,7 +72,7 @@ export function useLive() {
     await reload();
   }, [reload]);
 
-  return { live, disconnect };
+  return { live, disconnect, reload };
 }
 
 export type IslandHour = { label: string; celsius: number };

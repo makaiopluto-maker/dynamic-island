@@ -16,7 +16,9 @@ type SessionBody = {
 export function useGooglePhotos(active: boolean) {
   const [sessionId, setSessionId] = useState<string | null>(() => sessionStorage.getItem(SESSION_KEY));
   const [photos, setPhotos] = useState<GooglePhoto[]>([]);
+  const [library, setLibrary] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<"reconnect" | "unreachable" | null>(null);
 
   const refresh = useCallback(async (id: string) => {
@@ -45,12 +47,21 @@ export function useGooglePhotos(active: boolean) {
     return body;
   }, []);
 
+  const loadLibrary = useCallback(async () => {
+    const response = await fetch("/api/photos/library");
+    if (!response.ok) return;
+    const body = (await response.json()) as { items?: string[] };
+    setLibrary((body.items ?? []).filter((id) => typeof id === "string" && id.length > 0));
+  }, []);
+
   useEffect(() => {
-    if (!active || !sessionId) return;
+    if (!active) return;
     let stop = false;
     let timer = 0;
     const tick = async () => {
       try {
+        await loadLibrary();
+        if (stop || !sessionId) return;
         const body = await refresh(sessionId);
         if (stop || body.mediaItemsSet || body.error || body.pollMs === 0) return;
         timer = window.setTimeout(() => void tick(), body.pollMs ?? 3000);
@@ -64,7 +75,41 @@ export function useGooglePhotos(active: boolean) {
       stop = true;
       window.clearTimeout(timer);
     };
-  }, [active, refresh, sessionId]);
+  }, [active, loadLibrary, refresh, sessionId]);
+
+  const upload = useCallback(
+    async (files: FileList | null) => {
+      if (!files?.length) return;
+      setError(null);
+      setUploading(true);
+      try {
+        for (const file of Array.from(files).slice(0, 4)) {
+          if (file.size > 6_000_000 || !/^image\/(jpeg|png|gif|webp)$/.test(file.type)) {
+            setError("unreachable");
+            continue;
+          }
+          const response = await fetch("/api/photos/upload", {
+            method: "POST",
+            headers: { "content-type": file.type, "x-island-name": file.name },
+            body: file,
+          });
+          const body = (await response.json().catch(() => null)) as { id?: string; error?: string } | null;
+          if (body?.error === "reconnect" || response.status === 401) {
+            setError("reconnect");
+            break;
+          }
+          if (!response.ok || !body?.id) setError("unreachable");
+          else setLibrary((current) => [body.id as string, ...current.filter((item) => item !== body.id)]);
+        }
+        await loadLibrary();
+      } catch {
+        setError("unreachable");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [loadLibrary],
+  );
 
   const choose = useCallback(async (popup: Window | null) => {
     setError(null);
@@ -87,5 +132,5 @@ export function useGooglePhotos(active: boolean) {
     }
   }, []);
 
-  return { photos, picking, error, choose };
+  return { photos, library, picking, uploading, error, choose, upload };
 }

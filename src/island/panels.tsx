@@ -57,12 +57,14 @@ export function RadioView({ radio }: { radio: Radio }) {
   return (
     <div className="radio">
       <div className="radio-now">
-        <p className="kicker">Live</p>
+        <p className="kicker">
+          Channel {radio.index + 1} of {radio.stations.length}
+        </p>
         <h2>{radio.station.name}</h2>
         <p className="fine">{radio.failed ? "This station didn't start." : radio.station.detail}</p>
       </div>
       <div className="skiprow">
-        <button type="button" className="icon-btn" onClick={radio.prev} aria-label="Previous station">
+        <button type="button" className="icon-btn" onClick={radio.prev} aria-label="Previous channel">
           <PrevIcon />
         </button>
         <button
@@ -74,20 +76,25 @@ export function RadioView({ radio }: { radio: Radio }) {
         >
           {radio.playing ? <PauseIcon size={22} /> : <PlayIcon size={22} />}
         </button>
-        <button type="button" className="icon-btn" onClick={radio.next} aria-label="Next station">
+        <button type="button" className="icon-btn" onClick={radio.next} aria-label="Next channel">
           <NextIcon />
         </button>
       </div>
-      <div className="station-list">
-        {radio.stations.map((station) => (
+      <div className="station-list" role="listbox" aria-label="Radio channels">
+        {radio.stations.map((station, index) => (
           <button
             key={station.id}
             type="button"
+            role="option"
             className={station.id === radio.station.id ? "text-btn on" : "text-btn"}
-            aria-pressed={station.id === radio.station.id}
+            aria-selected={station.id === radio.station.id}
             onClick={() => radio.choose(station.id)}
           >
-            {station.name}
+            <span className="channel-no">{index + 1}</span>
+            <span>
+              <strong>{station.name}</strong>
+              <em>{station.detail}</em>
+            </span>
           </button>
         ))}
       </div>

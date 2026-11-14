@@ -5,8 +5,11 @@ import { brightnessSupported, readBrightness, writeBrightness } from "./brightne
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
+  "https://www.googleapis.com/auth/photoslibrary.appendonly",
+  "https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata",
   "https://www.googleapis.com/auth/youtube.readonly",
   "email",
 ].join(" ");
@@ -204,6 +207,218 @@ async function fetchCalendar(token, now) {
     end: event.end?.dateTime || event.end?.date || day.end,
     allDay: Boolean(event.start?.date && !event.start?.dateTime),
   }));
+}
+
+function decodeBody(data) {
+  return Buffer.from(String(data).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+}
+
+function collectText(part, found, depth = 0) {
+  if (!part || depth > 8) return;
+  if (typeof part.body?.data === "string" && part.body.data) {
+    const text = decodeBody(part.body.data);
+    if (part.mimeType === "text/plain" && !found.plain) found.plain = text;
+    if (part.mimeType === "text/html" && !found.html) found.html = text;
+  }
+  for (const child of part.parts ?? []) collectText(child, found, depth + 1);
+}
+
+function htmlToText(html) {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function readMail(token, id) {
+  const detail = await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`,
+    token,
+  );
+  const headers = detail.payload?.headers ?? [];
+  const header = (name) => headers.find((item) => item.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
+  const found = { plain: "", html: "" };
+  collectText(detail.payload, found);
+  const text = (found.plain.trim() || htmlToText(found.html) || detail.snippet || "").slice(0, 8000);
+  return {
+    id,
+    from: senderName(header("From") || "Unknown"),
+    subject: decodeHeader(header("Subject") || "(No subject)"),
+    text,
+  };
+}
+
+function encodeSubject(subject) {
+  if (/^[\t\x20-\x7e]*$/.test(subject)) return subject;
+  return `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
+}
+
+function mailRaw({ to, subject, text }) {
+  const message = [
+    `To: ${to}`,
+    `Subject: ${encodeSubject(subject)}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    text,
+  ].join("\r\n");
+  return Buffer.from(message, "utf8").toString("base64url");
+}
+
+async function sendMail(token, message) {
+  await googlePost("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", token, {
+    raw: mailRaw(message),
+  });
+}
+
+function clock(value) {
+  return typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : null;
+}
+
+function minutes(value) {
+  return Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+}
+
+async function createEvent(token, event) {
+  const day = seoulDay(new Date());
+  const data = await googlePost("https://www.googleapis.com/calendar/v3/calendars/primary/events", token, {
+    summary: event.title,
+    start: { dateTime: `${day.ymd}T${event.start}:00+09:00`, timeZone: "Asia/Seoul" },
+    end: { dateTime: `${day.ymd}T${event.end}:00+09:00`, timeZone: "Asia/Seoul" },
+  });
+  return {
+    id: data.id,
+    title: data.summary || event.title,
+    start: data.start?.dateTime || `${day.ymd}T${event.start}:00+09:00`,
+    end: data.end?.dateTime || `${day.ymd}T${event.end}:00+09:00`,
+    allDay: false,
+  };
+}
+
+async function googlePost(url, token, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (response.status === 401 || response.status === 403) {
+    const error = new Error("google");
+    error.status = response.status;
+    throw error;
+  }
+  if (!response.ok) {
+    const error = new Error("google");
+    error.status = response.status;
+    throw error;
+  }
+  const text = await response.text();
+  return text ? JSON.parse(text) : {};
+}
+
+function imageKind(bytes) {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return "image/png";
+  }
+  const head = bytes.subarray(0, 12).toString("ascii");
+  if (head.startsWith("GIF87a") || head.startsWith("GIF89a")) return "image/gif";
+  if (head.startsWith("RIFF") && bytes.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  return null;
+}
+
+function photoName(value) {
+  const base = String(value ?? "island.jpg").split(/[/\\]/).pop() ?? "island.jpg";
+  const clean = base.replace(/[^\w.\- ()]/g, "").slice(0, 80);
+  return clean || "island.jpg";
+}
+
+async function uploadPhoto(token, bytes, mime, filename) {
+  const uploaded = await fetch("https://photoslibrary.googleapis.com/v1/uploads", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/octet-stream",
+      "x-goog-upload-content-type": mime,
+      "x-goog-upload-protocol": "raw",
+    },
+    body: bytes,
+    signal: AbortSignal.timeout(20000),
+  });
+  if (uploaded.status === 401 || uploaded.status === 403) {
+    const error = new Error("google");
+    error.status = uploaded.status;
+    throw error;
+  }
+  const uploadToken = (await uploaded.text()).trim();
+  if (!uploaded.ok || !uploadToken) {
+    const error = new Error("google");
+    error.status = uploaded.status || 502;
+    throw error;
+  }
+  const created = await googlePost("https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate", token, {
+    newMediaItems: [
+      {
+        description: "From the island",
+        simpleMediaItem: { fileName: filename, uploadToken },
+      },
+    ],
+  });
+  const item = created.newMediaItemResults?.[0]?.mediaItem;
+  const id = safeId(item?.id);
+  if (!id) {
+    const error = new Error("google");
+    error.status = 502;
+    throw error;
+  }
+  return { id };
+}
+
+async function listUploaded(token) {
+  const data = await googleFetch("https://photoslibrary.googleapis.com/v1/mediaItems?pageSize=12", token);
+  return (data.mediaItems ?? [])
+    .map((item) => {
+      const id = safeId(item.id);
+      const mime = typeof item.mimeType === "string" ? item.mimeType : "";
+      if (!id || !mime.startsWith("image/")) return null;
+      return id;
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function photoHost(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.endsWith("googleusercontent.com");
+  } catch {
+    return false;
+  }
+}
+
+async function imageBytes(baseUrl, token) {
+  if (!photoHost(baseUrl)) return null;
+  const image = await fetch(`${baseUrl}=w480-h480`, {
+    headers: { authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!image.ok) return null;
+  const bytes = Buffer.from(await image.arrayBuffer());
+  const type = image.headers.get("content-type") ?? "";
+  if (bytes.length > 2_000_000 || !type.startsWith("image/")) return null;
+  return { bytes, type };
 }
 
 async function fetchAccount(token) {
@@ -468,6 +683,44 @@ function geminiLimited(sub) {
   return false;
 }
 
+const writeHits = new Map();
+
+function writeLimited(sub, bucket, limit) {
+  const key = `${bucket}:${sub}`;
+  const now = Date.now();
+  const recent = (writeHits.get(key) ?? []).filter((stamp) => now - stamp < 60_000);
+  if (recent.length >= limit) return true;
+  recent.push(now);
+  writeHits.set(key, recent);
+  return false;
+}
+
+async function withGoogle(cookies, credentials, secure, run) {
+  if (!cookies.gi_at) return json({ error: "reconnect" }, { status: 401 });
+  const finish = (response, extra = []) => {
+    for (const cookie of extra) response.headers.append("set-cookie", cookie);
+    return response;
+  };
+  try {
+    return finish(await run(cookies.gi_at));
+  } catch (error) {
+    if (error?.status === 401 && cookies.gi_rt && credentials) {
+      try {
+        const tokens = await refreshAccess(cookies.gi_rt, credentials);
+        cache.delete(cacheKey(cookies.gi_at));
+        return finish(await run(tokens.access_token), tokenCookies(tokens, secure));
+      } catch (retry) {
+        if (retry?.status === 401 || retry?.status === 403) {
+          return json({ error: "reconnect" }, { status: 401, cookies: cleared(secure) });
+        }
+        return json({ error: "unreachable" }, { status: 502 });
+      }
+    }
+    if (error?.status === 401 || error?.status === 403) return json({ error: "reconnect" }, { status: 401 });
+    return json({ error: "unreachable" }, { status: 502 });
+  }
+}
+
 async function requirePerson(request) {
   const identity = await getIdentity(request);
   if (!identity.verified || identity.kind !== "person") {
@@ -597,6 +850,82 @@ export async function handleApi(request) {
     const body = await request.json().catch(() => null);
     const level = await writeBrightness(body?.level);
     return json({ supported: brightnessSupported() && level != null, level });
+  }
+
+  if (url.pathname === "/api/mail" && request.method === "GET") {
+    if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+    const id = safeId(url.searchParams.get("id"));
+    if (!id) return json({ error: "bad_request" }, { status: 400 });
+    return withGoogle(cookies, credentials, secure, async (token) => json(await readMail(token, id)));
+  }
+
+  if (url.pathname === "/api/mail" && request.method === "POST") {
+    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+    if (writeLimited(viewer.sub, "mail", 8)) return json({ error: "busy" }, { status: 429 });
+    const body = await request.json().catch(() => null);
+    const to = typeof body?.to === "string" ? body.to.trim() : "";
+    const subject = typeof body?.subject === "string" ? body.subject.trim().slice(0, 200) : "";
+    const text = typeof body?.text === "string" ? body.text.trim().slice(0, 4000) : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || to.length > 200 || /[\r\n]/.test(to) || /[\r\n]/.test(subject)) {
+      return json({ error: "bad_request" }, { status: 400 });
+    }
+    if (!subject || !text) return json({ error: "bad_request" }, { status: 400 });
+    return withGoogle(cookies, credentials, secure, async (token) => {
+      await sendMail(token, { to, subject, text });
+      cache.delete(cacheKey(token));
+      return json({ ok: true });
+    });
+  }
+
+  if (url.pathname === "/api/calendar" && request.method === "POST") {
+    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+    if (writeLimited(viewer.sub, "calendar", 12)) return json({ error: "busy" }, { status: 429 });
+    const body = await request.json().catch(() => null);
+    const title = typeof body?.title === "string" ? body.title.trim().slice(0, 120) : "";
+    const start = clock(body?.start);
+    const end = clock(body?.end);
+    if (!title || !start || !end || minutes(end) <= minutes(start)) return json({ error: "bad_request" }, { status: 400 });
+    return withGoogle(cookies, credentials, secure, async (token) => {
+      const event = await createEvent(token, { title, start, end });
+      cache.delete(cacheKey(token));
+      return json({ event });
+    });
+  }
+
+  if (url.pathname === "/api/photos/library" && request.method === "GET") {
+    if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+    return withGoogle(cookies, credentials, secure, async (token) => json({ items: await listUploaded(token) }));
+  }
+
+  if (url.pathname === "/api/photos/library/media" && request.method === "GET") {
+    if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+    const id = safeId(url.searchParams.get("id"));
+    if (!id) return json({ error: "bad_request" }, { status: 400 });
+    return withGoogle(cookies, credentials, secure, async (token) => {
+      const item = await googleFetch(
+        `https://photoslibrary.googleapis.com/v1/mediaItems/${encodeURIComponent(id)}`,
+        token,
+      );
+      const baseUrl = typeof item.baseUrl === "string" ? item.baseUrl : "";
+      const image = await imageBytes(baseUrl, token);
+      if (!image) return json({ error: "unreachable" }, { status: 502 });
+      return new Response(image.bytes, {
+        headers: { "content-type": image.type, "cache-control": "private, max-age=300" },
+      });
+    });
+  }
+
+  if (url.pathname === "/api/photos/upload" && request.method === "POST") {
+    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+    if (writeLimited(viewer.sub, "photos", 6)) return json({ error: "busy" }, { status: 429 });
+    const bytes = Buffer.from(await request.arrayBuffer());
+    const mime = imageKind(bytes);
+    if (!mime || bytes.length > 6_000_000) return json({ error: "bad_request" }, { status: 400 });
+    const filename = photoName(request.headers.get("x-island-name"));
+    return withGoogle(cookies, credentials, secure, (token) => uploadPhoto(token, bytes, mime, filename).then((item) => json(item)));
   }
 
   if (url.pathname === "/api/photos/session" && (request.method === "GET" || request.method === "POST")) {
@@ -735,13 +1064,13 @@ export async function handleApi(request) {
   return json({ error: "not_found" }, { status: 404 });
 }
 
-function readBody(req) {
+function readBody(req, max = 32_000) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
     req.on("data", (chunk) => {
       size += chunk.length;
-      if (size > 32_000) {
+      if (size > max) {
         reject(new Error("too_large"));
         req.destroy();
         return;
@@ -754,6 +1083,8 @@ function readBody(req) {
 }
 
 export async function toWebRequest(req) {
+  const path = String(req.url ?? "/").split("?")[0];
+  const max = path === "/api/photos/upload" ? 6_500_000 : 32_000;
   const forwarded = req.headers["x-forwarded-proto"];
   const proto = String(Array.isArray(forwarded) ? forwarded[0] : forwarded ?? "http")
     .split(",")[0]
@@ -768,7 +1099,7 @@ export async function toWebRequest(req) {
     else headers.set(key, value);
   }
   const method = req.method ?? "GET";
-  const body = method === "GET" || method === "HEAD" ? undefined : await readBody(req);
+  const body = method === "GET" || method === "HEAD" ? undefined : await readBody(req, max);
   return new Request(url, { method, headers, body: body?.length ? body : undefined });
 }
 

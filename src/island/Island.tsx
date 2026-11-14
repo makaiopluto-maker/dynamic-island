@@ -50,6 +50,7 @@ export function Island({
   onAddPhotos,
   onPickContacts,
   onDisconnect,
+  onRefresh,
 }: {
   view: View;
   peek: PeekId;
@@ -80,6 +81,7 @@ export function Island({
   onAddPhotos: (files: FileList | null) => void;
   onPickContacts: () => void;
   onDisconnect: () => void;
+  onRefresh: () => void;
 }) {
   const reduce = useReducedMotion() ?? false;
   const spring = reduce
@@ -136,6 +138,7 @@ export function Island({
         onAddPhotos={onAddPhotos}
         onPickContacts={onPickContacts}
         onDisconnect={onDisconnect}
+        onRefresh={onRefresh}
         geminiReady={gemini.configured}
       />
     );

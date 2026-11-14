@@ -16,7 +16,7 @@ export default function App() {
   const now = useNow();
   const music = useMusic();
   const radio = useRadio();
-  const { live, disconnect } = useLive();
+  const { live, disconnect, reload } = useLive();
   const youtube = useYouTube(live.connected);
   const gemini = useGemini();
   const brightness = useBrightness();
@@ -147,6 +147,7 @@ export default function App() {
           onAddPhotos={(files) => void addPhotos(files)}
           onPickContacts={() => void pickContacts()}
           onDisconnect={() => void disconnect()}
+          onRefresh={() => void reload()}
         />
       </div>
       <p className="keys">Esc closes · 1 Home · 2 Music · 3 Gemini · 4 Radio</p>

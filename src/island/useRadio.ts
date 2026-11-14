@@ -33,6 +33,7 @@ export function useRadio() {
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
   const indexRef = useRef(0);
+  const tunedId = useRef<string | null>(null);
 
   useEffect(() => {
     const node = new Audio();
@@ -64,8 +65,10 @@ export function useRadio() {
     setIndex(next);
     setFailed(false);
     if (!node) return;
-    if (node.src !== station.url) {
+    if (tunedId.current !== station.id) {
+      tunedId.current = station.id;
       node.src = station.url;
+      node.load();
     }
     if (!shouldPlay) {
       node.pause();
@@ -113,5 +116,5 @@ export function useRadio() {
     }
   }, [playing, index, tune]);
 
-  return { station: stations[index], stations, playing, failed, play, stop, toggle, next, prev, choose };
+  return { station: stations[index], stations, index, playing, failed, play, stop, toggle, next, prev, choose };
 }
