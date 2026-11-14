@@ -83,6 +83,7 @@ export function PeekView({
   onAddPhotos,
   onPickContacts,
   onDisconnect,
+  geminiReady,
 }: {
   id: PeekId;
   now: Date;
@@ -96,6 +97,7 @@ export function PeekView({
   onAddPhotos: (files: FileList | null) => void;
   onPickContacts: () => void;
   onDisconnect: () => void;
+  geminiReady: boolean | null;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const face = seoulFace(now, null);
@@ -244,22 +246,13 @@ export function PeekView({
 
   if (id === "plus") {
     return (
-      <div className="peek stack">
-        <div className="peek-head">
-          <h2>Connected</h2>
-        </div>
-        <ul className="peek-scroll rows plain">
-          <li>Weather · Seoul, with today’s events</li>
-          <li>Mail · {live.connected ? live.account ?? "Google" : "sample until Google connects"}</li>
-          <li>Calendar · {live.calendar.source === "google" ? "Google, today" : "sample until Google connects"}</li>
-          <li>Photos · {live.connected ? "Google Photos" : "this device until Google connects"}</li>
-          <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
-          <li>Music · {live.connected ? "YouTube Music" : "sample until Google connects"}</li>
-          <li>Radio · live stations</li>
-          <li>Gemini · in this island</li>
-          <li>Lights · {brightness.supported ? "this monitor" : "the Windows app on this PC"}</li>
-        </ul>
-      </div>
+      <SettingsPeek
+        live={live}
+        geminiReady={geminiReady}
+        brightnessSupported={brightness.supported}
+        contactsSupported={contactsSupported}
+        onDisconnect={onDisconnect}
+      />
     );
   }
 
@@ -289,6 +282,91 @@ export function PeekView({
           ? "This slider moves the monitor on this PC."
           : "The Windows app on this PC moves the monitor. This copy only shows the level."}
       </p>
+    </div>
+  );
+}
+
+function useAlertPermission() {
+  const supported = typeof Notification !== "undefined";
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
+    supported ? Notification.permission : "unsupported",
+  );
+  const allow = () => {
+    if (!supported || permission !== "default") return;
+    void Notification.requestPermission().then(setPermission);
+  };
+  const label =
+    permission === "granted"
+      ? "On"
+      : permission === "denied"
+        ? "Blocked in the browser"
+        : permission === "unsupported"
+          ? "This browser has no alerts"
+          : "Off";
+  return { permission, allow, label };
+}
+
+function SettingsPeek({
+  live,
+  geminiReady,
+  brightnessSupported,
+  contactsSupported,
+  onDisconnect,
+}: {
+  live: LiveState;
+  geminiReady: boolean | null;
+  brightnessSupported: boolean;
+  contactsSupported: boolean;
+  onDisconnect: () => void;
+}) {
+  const alerts = useAlertPermission();
+  return (
+    <div className="peek stack">
+      <div className="peek-head">
+        <h2>Settings</h2>
+        <span className={live.connected ? "badge live" : "badge"}>{live.connected ? "Google" : "Setup"}</span>
+      </div>
+      <div className="setting">
+        <span>
+          <strong>Google</strong>
+          <em>{live.connected ? (live.account ?? "Connected") : "Mail, calendar, photos, and music"}</em>
+        </span>
+        {!live.ready ? (
+          <span className="badge">…</span>
+        ) : !live.googleConfigured ? (
+          <span className="badge">Sample</span>
+        ) : live.connected ? (
+          <button type="button" className="text-btn" onClick={onDisconnect}>
+            Disconnect
+          </button>
+        ) : (
+          <a className="link-btn" href="/api/auth/google">
+            Connect
+          </a>
+        )}
+      </div>
+      <div className="setting">
+        <span>
+          <strong>Alerts</strong>
+          <em>{alerts.label}</em>
+        </span>
+        {alerts.permission === "default" ? (
+          <button type="button" className="link-btn" onClick={alerts.allow}>
+            Allow
+          </button>
+        ) : null}
+      </div>
+      <ul className="peek-scroll rows plain">
+        <li>Weather · Seoul</li>
+        <li>Mail · {live.mail.source === "google" ? "Google" : "sample"}</li>
+        <li>Calendar · {live.calendar.source === "google" ? "Google, today" : "sample"}</li>
+        <li>Photos · {live.connected ? "Google Photos" : "this device"}</li>
+        <li>Music · {live.connected ? "YouTube Music" : "sample"}</li>
+        <li>Gemini · {geminiReady == null ? "checking" : geminiReady ? "ready" : "not connected on this copy"}</li>
+        <li>Radio · live stations</li>
+        <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
+        <li>Lights · {brightnessSupported ? "this monitor" : "the Windows app on this PC"}</li>
+      </ul>
     </div>
   );
 }

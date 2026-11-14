@@ -136,6 +136,7 @@ export function Island({
         onAddPhotos={onAddPhotos}
         onPickContacts={onPickContacts}
         onDisconnect={onDisconnect}
+        geminiReady={gemini.configured}
       />
     );
   }

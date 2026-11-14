@@ -20,7 +20,7 @@ type DockItem = {
 };
 
 const items: DockItem[] = [
-  { id: "plus-left", label: "Activities", icon: "plus" },
+  { id: "plus-left", label: "Settings", icon: "plus" },
   { id: "home", label: "Home", icon: "home" },
   { id: "gemini", label: "Gemini", icon: "gemini" },
   { id: "music", label: "Music", icon: "music" },
@@ -31,7 +31,7 @@ const items: DockItem[] = [
   { id: "photos", label: "Photos", icon: "photos" },
   { id: "calendar", label: "Calendar", icon: "calendar" },
   { id: "mail", label: "Mail", icon: "mail" },
-  { id: "plus-right", label: "Activities", icon: "plus" },
+  { id: "plus-right", label: "Settings", icon: "plus" },
 ];
 
 const icons = {
@@ -98,7 +98,7 @@ export function Dock({
             }}
           >
             <Icon />
-            {current && item.icon !== "plus" ? <span>{item.label}</span> : null}
+            {current && (item.icon !== "plus" || item.id === "plus-left") ? <span>{item.label}</span> : null}
           </button>
         );
       })}
