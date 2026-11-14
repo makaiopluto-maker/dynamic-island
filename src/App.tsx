@@ -8,6 +8,7 @@ import { useMusic, useNow, useViewport } from "./island/useActivities.ts";
 import { useBrightness } from "./island/useBrightness.ts";
 import { useGemini } from "./island/useGemini.ts";
 import { useRadio } from "./island/useRadio.ts";
+import { useMusicSource, useSpotify } from "./island/useSpotify.ts";
 import { useYouTube } from "./island/useYouTube.ts";
 import { Room } from "./scene/Room.tsx";
 
@@ -18,6 +19,8 @@ export default function App() {
   const radio = useRadio();
   const { live, disconnect, reload } = useLive();
   const youtube = useYouTube(live.connected);
+  const spotify = useSpotify();
+  const { source, setSource } = useMusicSource();
   const gemini = useGemini();
   const brightness = useBrightness();
   const [opened] = useState(() => new URLSearchParams(window.location.search).get("open"));
@@ -30,10 +33,11 @@ export default function App() {
   const unread = live.mail.source === "google" ? live.mail.messages.filter((message) => message.unread).length : 0;
   const upcoming = live.calendar.source === "google" ? soonEvent(live.calendar.events, now) : null;
 
-  const compact: Compact = compactFor(radio.playing, youtube.playing || music.playing, unread, upcoming?.title ?? "");
+  const musicPlaying = source === "spotify" ? spotify.playing : youtube.playing || music.playing;
+  const compact: Compact = compactFor(radio.playing, musicPlaying, unread, upcoming?.title ?? "");
   const dim = brightness.level != null && brightness.level <= 30;
   const mast = mastHeight(viewport.h);
-  const frame = frameFor(view, compact, viewport.w, viewport.h, mast, peek, live.connected);
+  const frame = frameFor(view, compact, viewport.w, viewport.h, mast, peek, live.connected || source === "spotify");
 
   useEffect(() => {
     if (opened || new URLSearchParams(window.location.search).has("google")) {
@@ -59,10 +63,18 @@ export default function App() {
         if (view === "music") {
           event.preventDefault();
           radio.stop();
-          if (live.connected) {
+          if (source === "spotify") {
             music.pause();
+            youtube.pause();
+            spotify.toggle();
+          } else if (live.connected) {
+            music.pause();
+            spotify.pause();
             youtube.toggle();
-          } else music.toggle();
+          } else {
+            spotify.pause();
+            music.toggle();
+          }
         } else if (view === "radio") {
           event.preventDefault();
           if (!radio.playing) music.pause();
@@ -72,23 +84,41 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view, live.connected, music, radio, youtube]);
+  }, [view, live.connected, source, music, radio, youtube, spotify]);
 
   useEffect(() => {
     if (!youtube.playing) return;
     music.pause();
     radio.stop();
-  }, [youtube.playing, music, radio]);
+    spotify.pause();
+  }, [youtube.playing, music, radio, spotify]);
+
+  useEffect(() => {
+    if (!spotify.playing) return;
+    music.pause();
+    radio.stop();
+    youtube.pause();
+  }, [spotify.playing, music, radio, youtube]);
 
   const openMusic = () => {
     radio.stop();
-    if (live.connected) music.pause();
-    else music.play();
+    if (source === "spotify") {
+      music.pause();
+      youtube.pause();
+    } else if (live.connected) {
+      music.pause();
+      spotify.pause();
+    } else {
+      spotify.pause();
+      music.play();
+    }
     setView("music");
   };
 
   const openRadio = () => {
     music.pause();
+    youtube.pause();
+    spotify.pause();
     radio.play();
     setView("radio");
   };
@@ -121,6 +151,15 @@ export default function App() {
           music={music}
           radio={radio}
           youtube={youtube}
+          spotify={spotify}
+          source={source}
+          onSource={(next) => {
+            if (next === "spotify") {
+              music.pause();
+              youtube.pause();
+            } else spotify.pause();
+            setSource(next);
+          }}
           gemini={gemini}
           brightness={brightness}
           deviceHere={deviceHere}

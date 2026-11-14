@@ -212,6 +212,11 @@ export function useYouTube(connected: boolean) {
     }
   }, [index, next, playing, prev, tracks]);
 
+  const pause = useCallback(() => {
+    playerRef.current?.pauseVideo();
+    setPlaying(false);
+  }, []);
+
   const toggle = useCallback(() => {
     const player = playerRef.current;
     const track = tracksRef.current[indexRef.current];
@@ -290,6 +295,7 @@ export function useYouTube(connected: boolean) {
     setQuery,
     error,
     toggle,
+    pause,
     next,
     prev,
     seek,

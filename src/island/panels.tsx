@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
 import type { useGemini } from "./useGemini.ts";
-import type { useRadio } from "./useRadio.ts";
+import type { Station, useRadio } from "./useRadio.ts";
 
 type Gemini = ReturnType<typeof useGemini>;
 type Radio = ReturnType<typeof useRadio>;
@@ -54,15 +54,51 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
 }
 
 export function RadioView({ radio }: { radio: Radio }) {
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState<Station[]>([]);
+  const [note, setNote] = useState("");
+
+  const search = async () => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    setNote("");
+    try {
+      const response = await fetch(`/api/radio/search?q=${encodeURIComponent(q)}`);
+      const body = (await response.json()) as { stations?: Station[]; error?: string };
+      if (!response.ok || body.error) {
+        setFound([]);
+        setNote(response.status === 429 ? "Too many lookups. Wait a minute." : "No station matched.");
+        return;
+      }
+      setFound(body.stations ?? []);
+      if (!body.stations?.length) setNote("No station matched.");
+    } catch {
+      setFound([]);
+      setNote("No station matched.");
+    }
+  };
+
   return (
     <div className="radio">
       <div className="radio-now">
-        <p className="kicker">
-          Channel {radio.index + 1} of {radio.stations.length}
-        </p>
+        <p className="kicker">{radio.station.mhz ? `${radio.station.mhz.toFixed(1)} MHz` : "Channel"}</p>
         <h2>{radio.station.name}</h2>
-        <p className="fine">{radio.failed ? "This station didn't start." : radio.station.detail}</p>
+        <p className="fine">
+          {radio.tuning ? "Finding the signal…" : radio.failed ? "This station didn't start." : radio.station.detail}
+        </p>
       </div>
+      <label className="dial">
+        <strong>{radio.mhz.toFixed(1)}</strong>
+        <input
+          type="range"
+          min={87.5}
+          max={108}
+          step={0.1}
+          value={radio.mhz}
+          aria-label="Frequency"
+          onChange={(event) => radio.tuneMhz(Number(event.target.value))}
+        />
+      </label>
       <div className="skiprow">
         <button type="button" className="icon-btn" onClick={radio.prev} aria-label="Previous channel">
           <PrevIcon />
@@ -81,23 +117,62 @@ export function RadioView({ radio }: { radio: Radio }) {
         </button>
       </div>
       <div className="station-list" role="listbox" aria-label="Radio channels">
-        {radio.stations.map((station, index) => (
-          <button
+        {radio.stations.map((station) => (
+          <div
             key={station.id}
-            type="button"
+            className={station.id === radio.station.id ? "station-row on" : "station-row"}
             role="option"
-            className={station.id === radio.station.id ? "text-btn on" : "text-btn"}
             aria-selected={station.id === radio.station.id}
-            onClick={() => radio.choose(station.id)}
           >
-            <span className="channel-no">{index + 1}</span>
-            <span>
-              <strong>{station.name}</strong>
-              <em>{station.detail}</em>
-            </span>
-          </button>
+            <button type="button" onClick={() => radio.choose(station.id)}>
+              <span className="channel-no">{station.mhz ? station.mhz.toFixed(1) : "•"}</span>
+              <span>
+                <strong>{station.name}</strong>
+                <em>{station.detail}</em>
+              </span>
+            </button>
+            {station.saved ? (
+              <button type="button" className="station-remove" onClick={() => radio.forget(station.id)} aria-label={`Remove ${station.name}`}>
+                ×
+              </button>
+            ) : null}
+          </div>
         ))}
       </div>
+      <form
+        className="composer radio-find"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void search();
+        }}
+      >
+        <label className="field">
+          Find a station
+          <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Find a station" />
+        </label>
+        <button type="submit" className="link-btn">
+          Search
+        </button>
+      </form>
+      {note ? <p className="fine">{note}</p> : null}
+      {found.length ? (
+        <div className="station-list found">
+          {found.map((station) => (
+            <button
+              key={station.id}
+              type="button"
+              className="text-btn"
+              onClick={() => {
+                radio.save(station);
+                setFound([]);
+                setQuery("");
+              }}
+            >
+              Add {station.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

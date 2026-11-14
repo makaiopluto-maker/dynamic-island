@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getIdentity } from "../cursor/identity.ts";
+import { dial } from "../shared/radio.mjs";
 import { sampleEvents, sampleMail, seoulDay } from "../shared/sample.mjs";
 import { brightnessSupported, readBrightness, writeBrightness } from "./brightness.mjs";
 
@@ -664,6 +665,57 @@ async function youtubeRoute(request, credentials, cookies, run) {
   }
 }
 
+function publicStream(value) {
+  if (typeof value !== "string" || !value.startsWith("https://")) return null;
+  try {
+    const url = new URL(value);
+    if (url.username || url.password) return null;
+    const host = url.hostname.toLowerCase();
+    if (host === "localhost" || host.endsWith(".local") || host === "0.0.0.0") return null;
+    if (/^(10\.|127\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(host)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function mapStation(item) {
+  const url = publicStream(item?.url_resolved || item?.url);
+  const name = typeof item?.name === "string" ? item.name.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+  const id = typeof item?.stationuuid === "string" && /^[0-9a-f-]{16,40}$/i.test(item.stationuuid) ? item.stationuuid : "";
+  if (!url || !name || !id) return null;
+  const place = [item.countrycode, item.codec].filter((part) => typeof part === "string" && part.trim()).join(" · ");
+  return { id, name, detail: place || "Live", url };
+}
+
+function scoreStation(station, query) {
+  const name = station.name.toLowerCase();
+  const needle = query.toLowerCase();
+  let score = name === needle ? 6 : name.includes(needle) ? 3 : 1;
+  if (/안동|충북|대구|부산|광주|제주|전주|창원|포항|울산|춘천/.test(station.name)) score -= 3;
+  return score;
+}
+
+async function findStations(query) {
+  const url = new URL("https://de1.api.radio-browser.info/json/stations/search");
+  url.searchParams.set("name", query);
+  url.searchParams.set("limit", "30");
+  url.searchParams.set("hidebroken", "true");
+  url.searchParams.set("order", "votes");
+  url.searchParams.set("reverse", "true");
+  const response = await fetch(url, {
+    headers: { "user-agent": "dynamic-island/0.1" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) {
+    const error = new Error("radio");
+    error.status = 502;
+    throw error;
+  }
+  const data = await response.json();
+  return (Array.isArray(data) ? data : []).map(mapStation).filter(Boolean);
+}
+
 function youtubeLimited(request) {
   const ip = (request.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim() || "local";
   const now = Date.now();
@@ -815,6 +867,32 @@ export async function handleApi(request) {
       const result = await askGemini(messages);
       if (result.error) return json({ error: result.error }, { status: result.status });
       return json({ text: result.text });
+    } catch {
+      return json({ error: "unreachable" }, { status: 502 });
+    }
+  }
+
+  if (url.pathname === "/api/radio/tune" && request.method === "GET") {
+    if (writeLimited(viewer.sub, "radio", 30)) return json({ error: "busy" }, { status: 429 });
+    const station = dial.find((item) => item.id === url.searchParams.get("id"));
+    if (!station) return json({ error: "bad_request" }, { status: 400 });
+    try {
+      const found = await findStations(station.query);
+      const best = found.sort((a, b) => scoreStation(b, station.query) - scoreStation(a, station.query))[0];
+      if (!best) return json({ error: "unreachable" }, { status: 502 });
+      return json({ id: station.id, name: best.name, url: best.url });
+    } catch {
+      return json({ error: "unreachable" }, { status: 502 });
+    }
+  }
+
+  if (url.pathname === "/api/radio/search" && request.method === "GET") {
+    if (writeLimited(viewer.sub, "radio", 30)) return json({ error: "busy" }, { status: 429 });
+    const q = (url.searchParams.get("q") ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (q.length < 2) return json({ error: "bad_request" }, { status: 400 });
+    try {
+      const stations = (await findStations(q)).slice(0, 8);
+      return json({ stations });
     } catch {
       return json({ error: "unreachable" }, { status: 502 });
     }

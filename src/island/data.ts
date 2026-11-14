@@ -109,6 +109,6 @@ export function frameFor(
   if (view === "home") return fit(narrow ? 508 : 292, narrow ? 28 : 36);
   if (view === "music") return fit(youtube ? (narrow ? 680 : 500) : narrow ? 520 : 360, 36);
   if (view === "gemini") return fit(narrow ? 520 : 420, 36);
-  if (view === "radio") return fit(narrow ? 560 : 460, 36);
+  if (view === "radio") return fit(narrow ? 640 : 560, 36);
   return fit(narrow ? 312 : 280, 36);
 }

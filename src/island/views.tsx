@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Cover } from "./Cover.tsx";
 import { formatElapsed, formatRemaining } from "./format.ts";
 import { AirplayIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
@@ -6,17 +6,22 @@ import type { Compact } from "./types.ts";
 import type { LiveState } from "./desk.ts";
 import type { useMusic } from "./useActivities.ts";
 import type { useRadio } from "./useRadio.ts";
+import type { MusicSource, useSpotify } from "./useSpotify.ts";
+import { spotifyEmbed, spotifyTarget } from "./useSpotify.ts";
 import type { useYouTube } from "./useYouTube.ts";
 
 type Music = ReturnType<typeof useMusic>;
 type Radio = ReturnType<typeof useRadio>;
 type YouTube = ReturnType<typeof useYouTube>;
+type Spotify = ReturnType<typeof useSpotify>;
 
 export function CompactFace({
   compact,
   music,
   radio,
   youtube,
+  spotify,
+  source,
   onOpen,
   onPeek,
   mailCount,
@@ -26,15 +31,18 @@ export function CompactFace({
   music: Music;
   radio: Radio;
   youtube: YouTube;
+  spotify: Spotify;
+  source: MusicSource;
   onOpen: (target: "home" | "music" | "radio" | "gemini") => void;
   onPeek: (id: "mail" | "calendar") => void;
   mailCount: number;
   eventTitle: string;
 }) {
   if (compact === "music") {
-    const title = youtube.playing && youtube.track ? youtube.track.title : music.track.title;
-    const position = youtube.playing && youtube.track ? youtube.position : music.position;
-    const duration = youtube.playing && youtube.track ? Math.max(youtube.duration, 1) : music.track.duration;
+    const spotifyOn = source === "spotify" && spotify.playing;
+    const title = spotifyOn ? spotify.current.title : youtube.playing && youtube.track ? youtube.track.title : music.track.title;
+    const position = spotifyOn ? 0 : youtube.playing && youtube.track ? youtube.position : music.position;
+    const duration = spotifyOn ? 1 : youtube.playing && youtube.track ? Math.max(youtube.duration, 1) : music.track.duration;
     const progress = Math.min(100, (position / duration) * 100);
     return (
       <button type="button" className="compact" onClick={() => onOpen("music")} aria-label={`Open ${title}`}>
@@ -91,6 +99,8 @@ export function HomeView({
   music,
   radio,
   youtube,
+  spotify,
+  source,
   geminiLine,
   onMusic,
   onGemini,
@@ -99,14 +109,16 @@ export function HomeView({
   music: Music;
   radio: Radio;
   youtube: YouTube;
+  spotify: Spotify;
+  source: MusicSource;
   geminiLine: string;
   onMusic: () => void;
   onGemini: () => void;
   onRadio: () => void;
 }) {
-  const title = youtube.track?.title ?? music.track.title;
-  const artist = youtube.track?.artist ?? music.track.artist;
-  const playing = youtube.track ? youtube.playing : music.playing;
+  const title = source === "spotify" ? spotify.current.title : youtube.track?.title ?? music.track.title;
+  const artist = source === "spotify" ? "Spotify" : youtube.track?.artist ?? music.track.artist;
+  const playing = source === "spotify" ? spotify.playing : youtube.track ? youtube.playing : music.playing;
   return (
     <div className="cards">
       <button type="button" className="card card-gemini" onClick={onGemini}>
@@ -130,8 +142,21 @@ export function HomeView({
         <span className="kicker">Radio</span>
         <span>
           <span className="card-title">{radio.station.name}</span>
-          <span className="card-sub">{radio.playing ? "Live" : "Ready"}</span>
+          <span className="card-sub">{radio.station.mhz ? `${radio.station.mhz.toFixed(1)} MHz` : radio.playing ? "Live" : "Ready"}</span>
         </span>
+      </button>
+    </div>
+  );
+}
+
+function SourceSwitch({ source, onSource }: { source: MusicSource; onSource: (source: MusicSource) => void }) {
+  return (
+    <div className="source-switch" role="group" aria-label="Music service">
+      <button type="button" aria-pressed={source === "youtube"} onClick={() => onSource("youtube")}>
+        YouTube Music
+      </button>
+      <button type="button" aria-pressed={source === "spotify"} onClick={() => onSource("spotify")}>
+        Spotify
       </button>
     </div>
   );
@@ -140,20 +165,28 @@ export function HomeView({
 export function MusicView({
   music,
   youtube,
+  spotify,
+  source,
+  onSource,
   live,
   deviceHere,
   onToggleDevice,
 }: {
   music: Music;
   youtube: YouTube;
+  spotify: Spotify;
+  source: MusicSource;
+  onSource: (source: MusicSource) => void;
   live: LiveState;
   deviceHere: boolean;
   onToggleDevice: () => void;
 }) {
-  if (live.connected) return <YouTubeMusic youtube={youtube} attach={youtube.attach} />;
+  if (source === "spotify") return <SpotifyMusic spotify={spotify} source={source} onSource={onSource} />;
+  if (live.connected) return <YouTubeMusic youtube={youtube} source={source} onSource={onSource} />;
   const progress = (music.position / music.track.duration) * 100;
   return (
     <div className="music-stage">
+      <SourceSwitch source={source} onSource={onSource} />
       <div className="music-copy">
         <p className="music-meta">
           {music.track.title} · {music.track.artist}
@@ -221,8 +254,17 @@ export function MusicView({
   );
 }
 
-function YouTubeMusic({ youtube, attach }: { youtube: YouTube; attach: YouTube["attach"] }) {
+function YouTubeMusic({
+  youtube,
+  source,
+  onSource,
+}: {
+  youtube: YouTube;
+  source: MusicSource;
+  onSource: (source: MusicSource) => void;
+}) {
   const frame = useRef<HTMLDivElement>(null);
+  const { attach } = youtube;
   useEffect(() => {
     attach(frame.current);
     return () => attach(null);
@@ -231,6 +273,7 @@ function YouTubeMusic({ youtube, attach }: { youtube: YouTube; attach: YouTube["
   const progress = (youtube.position / length) * 100;
   return (
     <div className="music-stage yt">
+      <SourceSwitch source={source} onSource={onSource} />
       <div className="yt-layout">
         <div className="yt-frame" ref={frame} />
         <div className="yt-side">
@@ -316,6 +359,64 @@ function YouTubeMusic({ youtube, attach }: { youtube: YouTube; attach: YouTube["
           <NextIcon />
         </button>
       </div>
+    </div>
+  );
+}
+
+function SpotifyMusic({
+  spotify,
+  source,
+  onSource,
+}: {
+  spotify: Spotify;
+  source: MusicSource;
+  onSource: (source: MusicSource) => void;
+}) {
+  const [link, setLink] = useState("");
+  const [note, setNote] = useState("");
+
+  return (
+    <div className="music-stage yt">
+      <SourceSwitch source={source} onSource={onSource} />
+      <p className="music-meta">Spotify · {spotify.current.title}</p>
+      <iframe className="spotify-frame" title={spotify.current.title} src={spotifyEmbed(spotify.current.uri)} allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" />
+      <div className="yt-row">
+        {spotify.picks.map((pick) => (
+          <button
+            key={pick.uri}
+            type="button"
+            className={pick.uri === spotify.current.uri ? "text-btn on" : "text-btn"}
+            onClick={() => spotify.open(pick.uri, pick.title)}
+          >
+            {pick.title}
+          </button>
+        ))}
+      </div>
+      <form
+        className="yt-search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const target = spotifyTarget(link);
+          if (!target) {
+            setNote("Paste a Spotify song, album, or playlist link.");
+            return;
+          }
+          setNote("");
+          spotify.open(target.uri, target.title);
+          setLink("");
+        }}
+      >
+        <input
+          value={link}
+          onChange={(event) => setLink(event.target.value)}
+          placeholder="Paste a Spotify link"
+          aria-label="Spotify link"
+        />
+        <button type="submit" className="link-btn">
+          Open
+        </button>
+      </form>
+      {note ? <p className="fine">{note}</p> : <p className="fine">Spotify plays with the account in this browser.</p>}
     </div>
   );
 }

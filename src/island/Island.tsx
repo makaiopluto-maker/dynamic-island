@@ -11,12 +11,14 @@ import type { useMusic } from "./useActivities.ts";
 import type { useBrightness } from "./useBrightness.ts";
 import type { useGemini } from "./useGemini.ts";
 import type { useRadio } from "./useRadio.ts";
+import type { MusicSource, useSpotify } from "./useSpotify.ts";
 import type { useYouTube } from "./useYouTube.ts";
 import { CompactFace, HomeView, MusicView } from "./views.tsx";
 
 type Music = ReturnType<typeof useMusic>;
 type Radio = ReturnType<typeof useRadio>;
 type YouTube = ReturnType<typeof useYouTube>;
+type Spotify = ReturnType<typeof useSpotify>;
 type Gemini = ReturnType<typeof useGemini>;
 type Brightness = ReturnType<typeof useBrightness>;
 
@@ -30,6 +32,9 @@ export function Island({
   music,
   radio,
   youtube,
+  spotify,
+  source,
+  onSource,
   gemini,
   brightness,
   deviceHere,
@@ -61,6 +66,9 @@ export function Island({
   music: Music;
   radio: Radio;
   youtube: YouTube;
+  spotify: Spotify;
+  source: MusicSource;
+  onSource: (source: MusicSource) => void;
   gemini: Gemini;
   brightness: Brightness;
   deviceHere: boolean;
@@ -97,6 +105,8 @@ export function Island({
         music={music}
         radio={radio}
         youtube={youtube}
+        spotify={spotify}
+        source={source}
         onOpen={onOpen}
         onPeek={onPeek}
         mailCount={mailCount}
@@ -109,6 +119,8 @@ export function Island({
         music={music}
         radio={radio}
         youtube={youtube}
+        spotify={spotify}
+        source={source}
         geminiLine={gemini.lastReply ? gemini.lastReply.slice(0, 42) : "In this island"}
         onMusic={onMusic}
         onGemini={() => onOpen("gemini")}
@@ -117,7 +129,16 @@ export function Island({
     );
   } else if (view === "music") {
     stage = (
-      <MusicView music={music} youtube={youtube} live={live} deviceHere={deviceHere} onToggleDevice={onToggleDevice} />
+      <MusicView
+        music={music}
+        youtube={youtube}
+        spotify={spotify}
+        source={source}
+        onSource={onSource}
+        live={live}
+        deviceHere={deviceHere}
+        onToggleDevice={onToggleDevice}
+      />
     );
   } else if (view === "gemini") {
     stage = <GeminiView gemini={gemini} />;

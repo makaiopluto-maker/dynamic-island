@@ -575,9 +575,9 @@ function SettingsPeek({
         <li>Mail · {live.mail.source === "google" ? "read and send" : "sample"}</li>
         <li>Calendar · {live.calendar.source === "google" ? "today, and new events" : "sample"}</li>
         <li>Photos · {live.connected ? "view and upload" : "this device"}</li>
-        <li>Music · {live.connected ? "YouTube Music" : "sample"}</li>
+        <li>Music · YouTube Music or Spotify</li>
         <li>Gemini · {geminiReady == null ? "checking" : geminiReady ? "ready" : "not connected on this copy"}</li>
-        <li>Radio · live stations</li>
+        <li>Radio · Seoul frequencies and channels</li>
         <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
         <li>Lights · {brightnessSupported ? "this monitor" : "the Windows app on this PC"}</li>
       </ul>
