@@ -224,24 +224,6 @@ export function smsAddress(raw: string) {
   return digits.slice(0, 16);
 }
 
-export function smsHref(phone: string, body: string) {
-  const address = smsAddress(phone);
-  const text = body.trim();
-  if (!address || !text) return "";
-  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  return `sms:${address}${ios ? "&" : "?"}body=${encodeURIComponent(text)}`;
-}
-
-export function openText(phone: string, body: string) {
-  const href = smsHref(phone, body);
-  if (!href) return;
-  const link = document.createElement("a");
-  link.href = href;
-  document.body.append(link);
-  link.click();
-  link.remove();
-}
-
 function readChats(): IslandChat[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(CHAT_KEY) ?? "[]") as IslandChat[];
@@ -276,7 +258,6 @@ export function useChats() {
         messages: [{ id: crypto.randomUUID(), text: body, at: new Date().toISOString() }],
       };
       write([chat, ...readChats()].slice(0, 30));
-      openText(address, body);
       return chat.id;
     },
     [write],
@@ -296,12 +277,22 @@ export function useChats() {
       );
       const current = next.find((chat) => chat.id === id);
       write(current ? [current, ...next.filter((chat) => chat.id !== id)] : next);
-      if (current?.phone) openText(current.phone, body);
     },
     [write],
   );
 
   return { chats, start, send };
+}
+
+export async function deliverText(to: string, text: string) {
+  const response = await fetch("/api/sms", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ to, text }),
+  });
+  if (response.ok) return "sent" as const;
+  const body = (await response.json().catch(() => null)) as { error?: string } | null;
+  return body?.error === "not_configured" ? ("not_configured" as const) : ("failed" as const);
 }
 
 const NOTICE_KEY = "island-notices";

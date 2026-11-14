@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { CalendarEvent, IslandChat, IslandContact, IslandPhoto, LiveState, MailMessage } from "./desk.ts";
-import { formatWhen, useChats } from "./desk.ts";
+import { deliverText, formatWhen, useChats } from "./desk.ts";
 import { seoulFace } from "./format.ts";
 import type { PeekId } from "./types.ts";
 import { useGooglePhotos } from "./useGooglePhotos.ts";
@@ -253,7 +253,7 @@ export function PeekView({
           <li>Calendar · {live.calendar.source === "google" ? "Google, today" : "sample until Google connects"}</li>
           <li>Photos · {live.connected ? "Google Photos" : "this device until Google connects"}</li>
           <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
-          <li>Messages · kept in this island</li>
+          <li>Messages · text to that number</li>
           <li>Music · {live.connected ? "YouTube Music" : "sample until Google connects"}</li>
           <li>Radio · live stations</li>
           <li>Gemini · in this island</li>
@@ -310,7 +310,19 @@ function MessagesPeek() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [draft, setDraft] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const open = chats.find((chat) => chat.id === openId) ?? null;
+
+  const deliver = async (to: string, text: string) => {
+    setPending(true);
+    setError(null);
+    const result = await deliverText(to, text).catch(() => "failed" as const);
+    setPending(false);
+    if (result === "sent") return true;
+    setError(result === "not_configured" ? "Connect a sender number before a text can leave." : "The text did not go out.");
+    return false;
+  };
 
   if (composing) {
     return (
@@ -318,13 +330,17 @@ function MessagesPeek() {
         className="peek stack"
         onSubmit={(event) => {
           event.preventDefault();
-          const id = start(name, phone, draft);
-          if (!id) return;
-          setName("");
-          setPhone("");
-          setDraft("");
-          setComposing(false);
-          setOpenId(id);
+          if (pending) return;
+          void deliver(phone, draft).then((ok) => {
+            if (!ok) return;
+            const id = start(name, phone, draft);
+            if (!id) return;
+            setName("");
+            setPhone("");
+            setDraft("");
+            setComposing(false);
+            setOpenId(id);
+          });
         }}
       >
         <div className="peek-head">
@@ -359,14 +375,35 @@ function MessagesPeek() {
           maxLength={500}
           rows={3}
         />
-        <button type="submit" className="link-btn">
+        <button type="submit" className="link-btn" disabled={pending}>
           Send
         </button>
+        {error ? <p className="fine">{error}</p> : null}
       </form>
     );
   }
 
-  if (open) return <ChatThread chat={open} draft={draft} onDraft={setDraft} onBack={() => setOpenId(null)} onSend={send} />;
+  if (open) {
+    return (
+      <ChatThread
+        chat={open}
+        draft={draft}
+        pending={pending}
+        error={error}
+        onDraft={setDraft}
+        onBack={() => {
+          setError(null);
+          setOpenId(null);
+        }}
+        onSend={async (id, text) => {
+          const current = chats.find((chat) => chat.id === id);
+          if (!current || !(await deliver(current.phone, text))) return;
+          send(id, text);
+          setDraft("");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="peek stack">
@@ -392,7 +429,7 @@ function MessagesPeek() {
           })}
         </ul>
       ) : (
-        <p className="fine">Add their number. Send opens the phone’s message app with that text.</p>
+        <p className="fine">Send delivers the text to that number. This computer does not use a phone.</p>
       )}
       <button type="button" className="link-btn" onClick={() => setComposing(true)}>
         New message
@@ -404,12 +441,16 @@ function MessagesPeek() {
 function ChatThread({
   chat,
   draft,
+  pending,
+  error,
   onDraft,
   onBack,
   onSend,
 }: {
   chat: IslandChat;
   draft: string;
+  pending: boolean;
+  error: string | null;
   onDraft: (value: string) => void;
   onBack: () => void;
   onSend: (id: string, text: string) => void;
@@ -437,8 +478,8 @@ function ChatThread({
         className="ask"
         onSubmit={(event) => {
           event.preventDefault();
+          if (pending) return;
           onSend(chat.id, draft);
-          onDraft("");
         }}
       >
         <input
@@ -448,10 +489,11 @@ function ChatThread({
           aria-label={`Message ${chat.name}`}
           maxLength={500}
         />
-        <button type="submit" className="link-btn">
+        <button type="submit" className="link-btn" disabled={pending}>
           Send
         </button>
       </form>
+      {error ? <p className="fine">{error}</p> : null}
     </div>
   );
 }
