@@ -1,9 +1,9 @@
 import type { PointerEvent } from "react";
 import { Cover } from "./Cover.tsx";
 import { snippets } from "./data.ts";
-import { formatClock, formatDoneAt, formatElapsed, formatRemaining, seoulFace } from "./format.ts";
+import { formatClock, formatDoneAt, formatElapsed, formatRemaining } from "./format.ts";
 import { AirplayIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
-import type { ClaudeTab, Compact, PeekId } from "./types.ts";
+import type { ClaudeTab, Compact } from "./types.ts";
 import type { useFocus, useMusic } from "./useActivities.ts";
 
 type Music = ReturnType<typeof useMusic>;
@@ -15,12 +15,18 @@ export function CompactFace({
   focus,
   editingSeconds,
   onOpen,
+  onPeek,
+  mailCount,
+  eventTitle,
 }: {
   compact: Compact;
   music: Music;
   focus: Focus;
   editingSeconds: number;
   onOpen: (target: "home" | "music" | "focus" | "claude") => void;
+  onPeek: (id: "mail" | "calendar") => void;
+  mailCount: number;
+  eventTitle: string;
 }) {
   if (compact === "music") {
     const progress = Math.min(100, (music.position / music.track.duration) * 100);
@@ -54,6 +60,24 @@ export function CompactFace({
       <button type="button" className="compact" onClick={() => onOpen("claude")} aria-label="Open Claude">
         <span className="mini-lamps" aria-hidden="true"><i /><i /></span>
         <span className="compact-time">{formatClock(editingSeconds)}</span>
+      </button>
+    );
+  }
+
+  if (compact === "mail") {
+    return (
+      <button type="button" className="compact" onClick={() => onPeek("mail")} aria-label="Open mail">
+        <span className="live-dot mail" />
+        <span className="compact-time">{mailCount} new</span>
+      </button>
+    );
+  }
+
+  if (compact === "event") {
+    return (
+      <button type="button" className="compact" onClick={() => onPeek("calendar")} aria-label="Open calendar">
+        <span className="live-dot event" />
+        <span className="compact-title">{eventTitle}</span>
       </button>
     );
   }
@@ -351,35 +375,3 @@ export function FocusView({ focus, now }: { focus: Focus; now: Date }) {
   );
 }
 
-export function PeekView({ id, dim, now }: { id: PeekId; dim: boolean; now: Date }) {
-  const face = seoulFace(now);
-  const copy = {
-    plus: {
-      title: "Four live activities",
-      body: "Home, Music, Claude, and Focus stay on the island. Everything else keeps quiet.",
-    },
-    messages: { title: "Messages", body: "Nothing new. The island stays quiet." },
-    moon: {
-      title: dim ? "Lights down" : "Lights up",
-      body: dim ? "The room is dim. The glass keeps its glow." : "Daylight is back across the glass.",
-    },
-    phone: { title: "Phone", body: "No missed calls." },
-    photos: { title: "North window", body: "Last light, kept in the glass." },
-    calendar: { title: face.longDate, body: "The day is open." },
-    mail: { title: "Mail", body: "Inbox zero. Leave it that way." },
-  }[id];
-
-  return (
-    <div className="peek">
-      {id === "photos" ? (
-        <div className="peek-photo">
-          <Cover theme="gold" />
-        </div>
-      ) : null}
-      <div>
-        <h2>{copy.title}</h2>
-        <p>{copy.body}</p>
-      </div>
-    </div>
-  );
-}

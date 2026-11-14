@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { snippets, tracks } from "./data.ts";
+import { askNotify, islandNotify, pushNotice } from "./desk.ts";
 import type { ClaudeTab } from "./types.ts";
 
 export function useNow() {
@@ -83,6 +84,25 @@ export function useMusic() {
     setPosition(nextPosition);
   }, []);
 
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    const track = tracks[index];
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.title,
+      artist: track.artist,
+      album: "Dynamic Island",
+    });
+    navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+    try {
+      navigator.mediaSession.setActionHandler("play", () => setPlaying(true));
+      navigator.mediaSession.setActionHandler("pause", () => setPlaying(false));
+      navigator.mediaSession.setActionHandler("nexttrack", next);
+      navigator.mediaSession.setActionHandler("previoustrack", prev);
+    } catch {
+      /* This browser does not expose media keys. */
+    }
+  }, [index, playing, next, prev]);
+
   return {
     track: tracks[index],
     playing,
@@ -117,6 +137,13 @@ export function useFocus() {
         setRemaining(0);
         setRunning(false);
         setDone(true);
+        pushNotice({
+          id: `focus-${Date.now()}`,
+          title: "Focus",
+          body: "Session complete.",
+          at: Date.now(),
+        });
+        islandNotify("Focus", "Session complete.");
         return;
       }
       remainingRef.current = next;
@@ -126,6 +153,7 @@ export function useFocus() {
   }, [running]);
 
   const start = useCallback(() => {
+    askNotify();
     const next = remainingRef.current <= 0 ? durationRef.current : remainingRef.current;
     remainingRef.current = next;
     setRemaining(next);

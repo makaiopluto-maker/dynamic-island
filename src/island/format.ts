@@ -4,7 +4,7 @@ function part(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTyp
   return parts.find((item) => item.type === type)?.value ?? "";
 }
 
-export function seoulFace(now: Date) {
+export function seoulFace(now: Date, celsius?: number | null) {
   const dateParts = new Intl.DateTimeFormat("en-US", {
     timeZone: SEOUL,
     weekday: "short",
@@ -26,7 +26,7 @@ export function seoulFace(now: Date) {
   const dayPeriod = part(timeParts, "dayPeriod").toUpperCase();
 
   return {
-    dateLine: `${weekday} ${day} ${month} / 6°`,
+    dateLine: `${weekday} ${day} ${month} / ${celsius == null ? "…" : `${celsius}°`}`,
     timeLine: `${hour}:${minute} ${dayPeriod}`,
     longDate: new Intl.DateTimeFormat("en-US", {
       timeZone: SEOUL,

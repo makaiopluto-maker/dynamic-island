@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { contactsSupported, soonEvent, useContacts, useLive, useNotices, usePhotos, useWeather } from "./island/desk.ts";
 import { Island } from "./island/Island.tsx";
 import { frameFor } from "./island/data.ts";
 import { mastHeight } from "./island/format.ts";
@@ -11,15 +12,36 @@ export default function App() {
   const now = useNow();
   const music = useMusic();
   const focus = useFocus();
-  const [view, setView] = useState<View>("idle");
-  const [peek, setPeek] = useState<PeekId>("plus");
+  const [opened] = useState(() => new URLSearchParams(window.location.search).get("open"));
+  const [view, setView] = useState<View>(() => (opened === "mail" ? "peek" : "idle"));
+  const [peek, setPeek] = useState<PeekId>(() => (opened === "mail" ? "mail" : "plus"));
   const [dim, setDim] = useState(false);
   const [deviceHere, setDeviceHere] = useState(true);
   const editing = useEditing(view === "claude");
+  const { live, disconnect } = useLive();
+  const celsius = useWeather();
+  const { photos, add: addPhotos } = usePhotos();
+  const { contacts, pick: pickContacts } = useContacts();
+  const notices = useNotices();
+  const unread = live.mail.source === "google" ? live.mail.messages.filter((message) => message.unread).length : 0;
+  const upcoming = live.calendar.source === "google" ? soonEvent(live.calendar.events, now) : null;
 
-  const compact: Compact = compactFor(focus.running, focus.done, music.playing, editing.live);
+  const compact: Compact = compactFor(
+    focus.running,
+    focus.done,
+    music.playing,
+    editing.live,
+    unread,
+    upcoming?.title ?? "",
+  );
   const mast = mastHeight(viewport.h);
-  const frame = frameFor(view, compact, viewport.w, viewport.h, mast);
+  const frame = frameFor(view, compact, viewport.w, viewport.h, mast, peek);
+
+  useEffect(() => {
+    if (opened || new URLSearchParams(window.location.search).has("google")) {
+      window.history.replaceState({}, "", "/");
+    }
+  }, [opened]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -97,6 +119,17 @@ export default function App() {
           }}
           onClose={() => setView("idle")}
           onMusic={openMusic}
+          live={live}
+          celsius={celsius}
+          photos={photos}
+          contacts={contacts}
+          notices={notices}
+          contactsSupported={contactsSupported()}
+          mailCount={unread}
+          eventTitle={upcoming?.title ?? "Next up"}
+          onAddPhotos={(files) => void addPhotos(files)}
+          onPickContacts={() => void pickContacts()}
+          onDisconnect={() => void disconnect()}
         />
       </div>
       <p className="keys">Esc closes · 1 Home · 2 Music · 3 Claude · 4 Focus</p>
@@ -107,9 +140,18 @@ export default function App() {
   );
 }
 
-function compactFor(focusRunning: boolean, focusDone: boolean, musicPlaying: boolean, editing: boolean): Compact {
+function compactFor(
+  focusRunning: boolean,
+  focusDone: boolean,
+  musicPlaying: boolean,
+  editing: boolean,
+  unread: number,
+  eventTitle: string,
+): Compact {
   if (focusRunning || focusDone) return "focus";
   if (musicPlaying) return "music";
+  if (unread > 0) return "mail";
+  if (eventTitle) return "event";
   if (editing) return "claude";
   return "eyes";
 }

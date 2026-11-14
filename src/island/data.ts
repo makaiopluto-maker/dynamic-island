@@ -1,4 +1,4 @@
-import type { Compact, CoverTheme, Frame, View } from "./types.ts";
+import type { Compact, CoverTheme, Frame, PeekId, View } from "./types.ts";
 
 export type Track = {
   title: string;
@@ -81,6 +81,7 @@ export function frameFor(
   viewportWidth: number,
   viewportHeight: number,
   mast: number,
+  peek: PeekId,
 ): Frame {
   const wide = Math.min(760, viewportWidth - 24);
   const narrow = viewportWidth < 720;
@@ -93,11 +94,17 @@ export function frameFor(
 
   if (view === "idle") {
     if (compact === "music") return { width: Math.min(236, wide), height: 44, radius: 22 };
+    if (compact === "event") return { width: Math.min(220, wide), height: 44, radius: 22 };
+    if (compact === "mail") return { width: Math.min(132, wide), height: 44, radius: 22 };
     if (compact === "focus") return { width: Math.min(148, wide), height: 44, radius: 22 };
     if (compact === "claude") return { width: Math.min(148, wide), height: 44, radius: 22 };
     return { width: 126, height: 40, radius: 22 };
   }
-  if (view === "peek") return fit(narrow ? 228 : 188, 30);
+  if (view === "peek") {
+    const tall = peek === "mail" || peek === "calendar" || peek === "photos" || peek === "phone" || peek === "messages" || peek === "plus";
+    if (!tall) return fit(narrow ? 220 : 188, 30);
+    return fit(narrow ? 460 : 360, 30);
+  }
   if (view === "home") return fit(narrow ? 508 : 292, narrow ? 28 : 36);
   if (view === "music") return fit(narrow ? 492 : 328, 36);
   if (view === "claude") return fit(narrow ? 372 : 312, 36);

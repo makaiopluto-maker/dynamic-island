@@ -1,11 +1,13 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { CSSProperties, ReactNode } from "react";
 import { Cover } from "./Cover.tsx";
+import type { IslandContact, IslandNotice, IslandPhoto, LiveState } from "./desk.ts";
 import { Dock } from "./Dock.tsx";
+import { PeekView } from "./peeks.tsx";
 import { StatusBar } from "./StatusBar.tsx";
 import type { Compact, Frame, PeekId, View } from "./types.ts";
 import type { useEditing, useFocus, useMusic } from "./useActivities.ts";
-import { ClaudeView, CompactFace, FocusView, HomeView, MusicView, PeekView } from "./views.tsx";
+import { ClaudeView, CompactFace, FocusView, HomeView, MusicView } from "./views.tsx";
 
 type Music = ReturnType<typeof useMusic>;
 type Focus = ReturnType<typeof useFocus>;
@@ -28,6 +30,17 @@ export function Island({
   onMoon,
   onClose,
   onMusic,
+  live,
+  celsius,
+  photos,
+  contacts,
+  notices,
+  contactsSupported,
+  mailCount,
+  eventTitle,
+  onAddPhotos,
+  onPickContacts,
+  onDisconnect,
 }: {
   view: View;
   peek: PeekId;
@@ -45,6 +58,17 @@ export function Island({
   onMoon: () => void;
   onClose: () => void;
   onMusic: () => void;
+  live: LiveState;
+  celsius: number | null;
+  photos: IslandPhoto[];
+  contacts: IslandContact[];
+  notices: IslandNotice[];
+  contactsSupported: boolean;
+  mailCount: number;
+  eventTitle: string;
+  onAddPhotos: (files: FileList | null) => void;
+  onPickContacts: () => void;
+  onDisconnect: () => void;
 }) {
   const reduce = useReducedMotion() ?? false;
   const spring = reduce
@@ -61,6 +85,9 @@ export function Island({
         focus={focus}
         editingSeconds={editing.seconds}
         onOpen={onOpen}
+        onPeek={onPeek}
+        mailCount={mailCount}
+        eventTitle={eventTitle}
       />
     );
   } else if (view === "home") {
@@ -90,7 +117,21 @@ export function Island({
   } else if (view === "focus") {
     stage = <FocusView focus={focus} now={now} />;
   } else {
-    stage = <PeekView id={peek} dim={dim} now={now} />;
+    stage = (
+      <PeekView
+        id={peek}
+        dim={dim}
+        now={now}
+        live={live}
+        photos={photos}
+        contacts={contacts}
+        notices={notices}
+        contactsSupported={contactsSupported}
+        onAddPhotos={onAddPhotos}
+        onPickContacts={onPickContacts}
+        onDisconnect={onDisconnect}
+      />
+    );
   }
 
   return (
@@ -133,7 +174,7 @@ export function Island({
                   </motion.div>
                 </AnimatePresence>
               ) : null}
-              <StatusBar now={now} onClose={onClose} />
+              <StatusBar now={now} onClose={onClose} celsius={celsius} />
               <div className="stage">{stage}</div>
               <Dock view={view} peek={peek} dim={dim} onOpen={onOpen} onPeek={onPeek} onMoon={onMoon} />
             </>
@@ -148,6 +189,8 @@ function glowFor(view: View, compact: Compact) {
   if (view === "claude" || (view === "idle" && compact === "claude")) return "255, 148, 72";
   if (view === "focus" || (view === "idle" && compact === "focus")) return "154, 124, 255";
   if (view === "music" || (view === "idle" && compact === "music")) return "255, 122, 96";
+  if (view === "idle" && compact === "mail") return "255, 140, 90";
+  if (view === "idle" && compact === "event") return "120, 186, 255";
   if (view === "home") return "255, 176, 122";
   if (view === "peek") return "255, 196, 150";
   return "255, 255, 255";

@@ -1,7 +1,7 @@
 import { seoulFace } from "./format.ts";
 
-export function StatusBar({ now, onClose }: { now: Date; onClose: () => void }) {
-  const face = seoulFace(now);
+export function StatusBar({ now, onClose, celsius }: { now: Date; onClose: () => void; celsius: number | null }) {
+  const face = seoulFace(now, celsius);
   return (
     <div className="status">
       <span className="status-date">{face.dateLine}</span>

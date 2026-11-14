@@ -9,7 +9,7 @@ export type PeekId =
   | "calendar"
   | "mail";
 
-export type Compact = "eyes" | "music" | "focus" | "claude";
+export type Compact = "eyes" | "music" | "focus" | "claude" | "mail" | "event";
 
 export type ClaudeTab = "read" | "edit" | "test" | "done";
 
