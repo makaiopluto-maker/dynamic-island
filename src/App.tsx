@@ -164,7 +164,10 @@ export default function App() {
           brightness={brightness}
           deviceHere={deviceHere}
           onToggleDevice={() => setDeviceHere((value) => !value)}
-          onOpen={setView}
+          onOpen={(next) => {
+            if (next === "radio") openRadio();
+            else setView(next);
+          }}
           onPeek={(id) => {
             setPeek(id);
             setView("peek");

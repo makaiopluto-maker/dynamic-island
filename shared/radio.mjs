@@ -14,7 +14,7 @@ export const dial = [
 
 export const channels = [
   { id: "kpop", name: "Big B K-Pop", detail: "K-Pop", url: "https://antares.dribbcast.com/proxy/kpop?mp=/s" },
-  { id: "moe", name: "Listen.moe", detail: "K-Pop", url: "https://listen.moe/kpop/stream" },
+  { id: "moe", name: "Listen.moe", detail: "K-Pop", url: "https://listen.moe/kpop/fallback" },
   { id: "rey", name: "REYFM K-Pop", detail: "K-Pop", url: "https://listen.reyfm.de/kpop_320kbps.mp3" },
   { id: "fred", name: "Fred Film", detail: "한국어", url: "https://s10.webradio-hosting.com/proxy/fredradiokr/stream" },
   { id: "paradise", name: "Radio Paradise", detail: "Eclectic", url: "https://stream.radioparadise.com/mp3-128" },

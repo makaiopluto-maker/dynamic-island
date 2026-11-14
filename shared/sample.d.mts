@@ -2,6 +2,7 @@ export type MailMessage = {
   id: string;
   from: string;
   subject: string;
+  text?: string;
   at: string;
   unread: boolean;
 };

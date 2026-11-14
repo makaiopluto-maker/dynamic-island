@@ -679,11 +679,12 @@ function publicStream(value) {
   }
 }
 
-function mapStation(item) {
+function mapStation(item, progressive = false) {
   const url = publicStream(item?.url_resolved || item?.url);
   const name = typeof item?.name === "string" ? item.name.replace(/\s+/g, " ").trim().slice(0, 80) : "";
   const id = typeof item?.stationuuid === "string" && /^[0-9a-f-]{16,40}$/i.test(item.stationuuid) ? item.stationuuid : "";
   if (!url || !name || !id) return null;
+  if (progressive && /\.m3u8(\?|$)/i.test(url)) return null;
   const place = [item.countrycode, item.codec].filter((part) => typeof part === "string" && part.trim()).join(" · ");
   return { id, name, detail: place || "Live", url };
 }
@@ -696,7 +697,35 @@ function scoreStation(station, query) {
   return score;
 }
 
-async function findStations(query) {
+async function streamPlays(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch(url, {
+      headers: { "user-agent": "Mozilla/5.0", range: "bytes=0-256" },
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    if (!response.ok || !response.body) return false;
+    const reader = response.body.getReader();
+    const { value } = await reader.read();
+    await reader.cancel().catch(() => {});
+    if (!value?.length) return false;
+    const head = Buffer.from(value.subarray(0, 12)).toString("utf8");
+    if (head.startsWith("#EXT") || head.startsWith("OggS") || head.startsWith("ID3")) return true;
+    if (value[0] === 0xff && (value[1] & 0xe0) === 0xe0) return true;
+    const type = response.headers.get("content-type") ?? "";
+    return type.includes("mpegurl") || type.startsWith("audio/");
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const playable = new Map();
+
+async function findStations(query, progressive = false) {
   const url = new URL("https://de1.api.radio-browser.info/json/stations/search");
   url.searchParams.set("name", query);
   url.searchParams.set("limit", "30");
@@ -713,7 +742,7 @@ async function findStations(query) {
     throw error;
   }
   const data = await response.json();
-  return (Array.isArray(data) ? data : []).map(mapStation).filter(Boolean);
+  return (Array.isArray(data) ? data : []).map((item) => mapStation(item, progressive)).filter(Boolean);
 }
 
 function youtubeLimited(request) {
@@ -877,10 +906,15 @@ export async function handleApi(request) {
     const station = dial.find((item) => item.id === url.searchParams.get("id"));
     if (!station) return json({ error: "bad_request" }, { status: 400 });
     try {
-      const found = await findStations(station.query);
-      const best = found.sort((a, b) => scoreStation(b, station.query) - scoreStation(a, station.query))[0];
-      if (!best) return json({ error: "unreachable" }, { status: 502 });
-      return json({ id: station.id, name: best.name, url: best.url });
+      const cached = playable.get(station.id);
+      if (cached && Date.now() - cached.at < 120_000) return json({ id: station.id, name: cached.name, url: cached.url });
+      const found = (await findStations(station.query)).sort((a, b) => scoreStation(b, station.query) - scoreStation(a, station.query));
+      for (const candidate of found.slice(0, 4)) {
+        if (!(await streamPlays(candidate.url))) continue;
+        playable.set(station.id, { at: Date.now(), name: candidate.name, url: candidate.url });
+        return json({ id: station.id, name: candidate.name, url: candidate.url });
+      }
+      return json({ error: "unreachable" }, { status: 502 });
     } catch {
       return json({ error: "unreachable" }, { status: 502 });
     }
@@ -891,7 +925,7 @@ export async function handleApi(request) {
     const q = (url.searchParams.get("q") ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
     if (q.length < 2) return json({ error: "bad_request" }, { status: 400 });
     try {
-      const stations = (await findStations(q)).slice(0, 8);
+      const stations = (await findStations(q, true)).slice(0, 8);
       return json({ stations });
     } catch {
       return json({ error: "unreachable" }, { status: 502 });

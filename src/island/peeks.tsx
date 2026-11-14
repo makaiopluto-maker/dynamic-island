@@ -79,6 +79,7 @@ function MailPeek({
   onDisconnect: () => void;
 }) {
   const unread = live.mail.messages.filter((message) => message.unread).length;
+  const [pane, setPane] = useState<"list" | "read" | "write">("list");
   const [openId, setOpenId] = useState<string | null>(null);
   const [letter, setLetter] = useState("");
   const [to, setTo] = useState("");
@@ -90,8 +91,10 @@ function MailPeek({
 
   const open = async (id: string) => {
     setOpenId(id);
+    setPane("read");
     if (!google || id.startsWith("sample-")) {
-      setLetter("This is a sample. Connect Google to read the message.");
+      const message = live.mail.messages.find((item) => item.id === id);
+      setLetter(message?.text || message?.subject || "");
       return;
     }
     setLetter("Opening…");
@@ -142,6 +145,61 @@ function MailPeek({
     }
   };
 
+  const opened = live.mail.messages.find((message) => message.id === openId);
+
+  if (pane === "read" && openId) {
+    return (
+      <div className="peek stack">
+        <div className="peek-head">
+          <button type="button" className="text-btn" onClick={() => setPane("list")}>
+            Inbox
+          </button>
+          <Badge source={live.mail.source} />
+        </div>
+        <h2>{opened?.subject ?? "Mail"}</h2>
+        <p className="fine">{opened?.from}</p>
+        <p className="letter peek-scroll">{letter}</p>
+      </div>
+    );
+  }
+
+  if (pane === "write") {
+    return (
+      <div className="peek stack">
+        <div className="peek-head">
+          <button type="button" className="text-btn" onClick={() => setPane("list")}>
+            Inbox
+          </button>
+          <Badge source={live.mail.source} />
+        </div>
+        <form
+          className="composer"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void send();
+          }}
+        >
+          <label className="field">
+            To
+            <input value={to} onChange={(event) => setTo(event.target.value)} inputMode="email" autoComplete="email" required />
+          </label>
+          <label className="field">
+            Subject
+            <input value={subject} onChange={(event) => setSubject(event.target.value)} required />
+          </label>
+          <label className="field">
+            Message
+            <textarea value={text} onChange={(event) => setText(event.target.value)} required />
+          </label>
+          <button type="submit" className="link-btn" disabled={sending}>
+            {sending ? "Sending…" : "Send"}
+          </button>
+        </form>
+        {note ? <p className="fine">{note}</p> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="peek stack">
       <div className="peek-head">
@@ -149,30 +207,9 @@ function MailPeek({
         <Badge source={live.mail.source} />
       </div>
       <MailList messages={live.mail.messages} error={live.mail.error} openId={openId} onOpen={(id) => void open(id)} />
-      {openId ? <p className="letter peek-scroll">{letter}</p> : null}
-      <form
-        className="composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void send();
-        }}
-      >
-        <label className="field">
-          To
-          <input value={to} onChange={(event) => setTo(event.target.value)} inputMode="email" autoComplete="email" required />
-        </label>
-        <label className="field">
-          Subject
-          <input value={subject} onChange={(event) => setSubject(event.target.value)} required />
-        </label>
-        <label className="field">
-          Message
-          <textarea value={text} onChange={(event) => setText(event.target.value)} required />
-        </label>
-        <button type="submit" className="link-btn" disabled={sending}>
-          {sending ? "Sending…" : "Send"}
-        </button>
-      </form>
+      <button type="button" className="link-btn" onClick={() => setPane("write")}>
+        Write
+      </button>
       {note ? <p className="fine">{note}</p> : null}
       <GoogleRow live={live} onDisconnect={onDisconnect} />
     </div>

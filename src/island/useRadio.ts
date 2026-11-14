@@ -16,18 +16,18 @@ export type Station = {
 
 function builtIn(): Station[] {
   return [
+    ...channels.map((station) => ({
+      id: station.id,
+      name: station.name,
+      detail: station.detail,
+      url: station.url,
+    })),
     ...dial.map((station) => ({
       id: station.id,
       name: station.name,
       detail: station.detail,
       mhz: station.mhz,
       live: true,
-    })),
-    ...channels.map((station) => ({
-      id: station.id,
-      name: station.name,
-      detail: station.detail,
-      url: station.url,
     })),
   ];
 }
@@ -79,6 +79,7 @@ export function useRadio() {
     const onPlaying = () => setPlaying(true);
     const onPause = () => setPlaying(false);
     const onError = () => {
+      if (hlsRef.current) return;
       setPlaying(false);
       setFailed(true);
     };
@@ -88,6 +89,7 @@ export function useRadio() {
     return () => {
       hlsRef.current?.destroy();
       hlsRef.current = null;
+      tunedId.current = null;
       node.pause();
       node.removeEventListener("playing", onPlaying);
       node.removeEventListener("pause", onPause);
@@ -96,33 +98,65 @@ export function useRadio() {
     };
   }, []);
 
-  const attach = useCallback(async (node: HTMLAudioElement, url: string) => {
+  const playNode = useCallback((node: HTMLAudioElement) => {
+    void node.play().catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "NotAllowedError") return;
+      setPlaying(false);
+      setFailed(true);
+    });
+  }, []);
+
+  const attachDirect = useCallback((node: HTMLAudioElement, stationId: string, url: string) => {
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
-    if (isHls(url)) {
-      const { default: Hls } = await import("hls.js");
-      if (Hls.isSupported()) {
-        node.removeAttribute("src");
-        const hls = new Hls({ enableWorker: false, maxBufferLength: 20 });
-        hlsRef.current = hls;
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) {
-            setPlaying(false);
-            setFailed(true);
-          }
-        });
-        hls.loadSource(url);
-        hls.attachMedia(node);
-        return;
-      }
-    }
+    const key = `${stationId}:${url}`;
+    if (tunedId.current === key && (node.currentSrc === url || node.src === url)) return;
+    tunedId.current = key;
     node.src = url;
     node.load();
   }, []);
 
-  const tune = useCallback(async (nextIndex: number, shouldPlay: boolean) => {
+  const attachHls = useCallback((node: HTMLAudioElement, stationId: string, url: string) => {
+    return new Promise<void>((resolve, reject) => {
+      void import("hls.js").then(({ default: Hls }) => {
+        if (!Hls.isSupported()) {
+          reject(new Error("hls"));
+          return;
+        }
+        if (hlsRef.current) hlsRef.current.destroy();
+        node.removeAttribute("src");
+        const hls = new Hls({ enableWorker: false, lowLatencyMode: false, maxBufferLength: 20 });
+        hlsRef.current = hls;
+        tunedId.current = `${stationId}:${url}`;
+        let settled = false;
+        const timer = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error("hls"));
+        }, 8000);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          window.clearTimeout(timer);
+          if (settled) return;
+          settled = true;
+          resolve();
+        });
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (!data.fatal || settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          setPlaying(false);
+          setFailed(true);
+          reject(new Error("hls"));
+        });
+        hls.loadSource(url);
+        hls.attachMedia(node);
+      }).catch(reject);
+    });
+  }, []);
+
+  const tune = useCallback((nextIndex: number, shouldPlay: boolean) => {
     const list = stationsRef.current;
     if (!list.length) return;
     const next = (nextIndex + list.length) % list.length;
@@ -138,8 +172,14 @@ export function useRadio() {
       node.pause();
       return;
     }
-    let url = station.url ?? "";
-    if (station.live) {
+    if (!station.live && station.url) {
+      setTuning(false);
+      attachDirect(node, station.id, station.url);
+      playNode(node);
+      return;
+    }
+    void (async () => {
+      let url = "";
       const cached = resolved.current.get(station.id);
       if (cached && Date.now() - cached.at < 60_000) url = cached.url;
       else {
@@ -159,20 +199,22 @@ export function useRadio() {
           return;
         }
       }
-    }
-    if (mine !== ticket.current || !url) return;
-    setTuning(false);
-    if (tunedId.current !== `${station.id}:${url}`) {
-      tunedId.current = `${station.id}:${url}`;
-      await attach(node, url);
-    }
-    if (mine !== ticket.current) return;
-    void node.play().catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === "NotAllowedError") return;
-      setPlaying(false);
-      setFailed(true);
-    });
-  }, [attach]);
+      if (mine !== ticket.current || !url) return;
+      setTuning(false);
+      try {
+        if (isHls(url)) await attachHls(node, station.id, url);
+        else attachDirect(node, station.id, url);
+      } catch {
+        if (mine === ticket.current) {
+          setFailed(true);
+          setPlaying(false);
+        }
+        return;
+      }
+      if (mine !== ticket.current) return;
+      playNode(node);
+    })();
+  }, [attachDirect, attachHls, playNode]);
 
   const play = useCallback(() => void tune(indexRef.current, true), [tune]);
   const stop = useCallback(() => {

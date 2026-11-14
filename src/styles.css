@@ -1051,9 +1051,10 @@ button.row[aria-current="true"] { background: rgba(255, 255, 255, 0.08); }
 .letter {
   margin: 0;
   white-space: pre-wrap;
-  font-size: 13px;
-  line-height: 1.4;
-  max-height: 120px;
+  font-size: 14px;
+  line-height: 1.45;
+  flex: 1;
+  min-height: 0;
 }
 .photo-grid {
   display: grid;
