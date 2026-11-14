@@ -981,6 +981,7 @@ input:focus-visible {
   object-fit: cover;
   border-radius: 12px;
 }
+.photo-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .gemini, .radio {
   height: 100%;
   min-height: 0;

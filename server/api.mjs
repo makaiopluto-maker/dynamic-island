@@ -5,6 +5,7 @@ import { brightnessSupported, readBrightness, writeBrightness } from "./brightne
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
   "email",
 ].join(" ");
 
@@ -255,6 +256,76 @@ async function loadConnected(access, refresh, credentials, now) {
   }
 }
 
+const photoLists = new Map();
+
+function safeId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9._~-]{6,300}$/.test(value) ? value : null;
+}
+
+function pickerUri(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !url.hostname.endsWith(".google.com")) return null;
+    if (!url.pathname.endsWith("/autoclose")) url.pathname = `${url.pathname.replace(/\/$/, "")}/autoclose`;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function pollMs(session) {
+  const raw = session.pollingConfig?.pollInterval ?? "3s";
+  const seconds = Number(String(raw).replace(/s$/, ""));
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  return Math.min(8000, Math.max(2000, Math.round(seconds * 1000)));
+}
+
+async function createPhotoSession(token) {
+  const response = await fetch("https://photospicker.googleapis.com/v1/sessions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ pickingConfig: { maxItemCount: "8" } }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401 || response.status === 403) {
+    const error = new Error("photos");
+    error.status = response.status;
+    throw error;
+  }
+  if (!response.ok) {
+    const error = new Error("photos");
+    error.status = 502;
+    throw error;
+  }
+  return response.json();
+}
+
+async function listPicked(token, sessionId) {
+  const key = `${cacheKey(token)}:${sessionId}`;
+  const hit = photoLists.get(key);
+  if (hit && Date.now() - hit.at < 20_000) return hit.items;
+  const data = await googleFetch(
+    `https://photospicker.googleapis.com/v1/mediaItems?sessionId=${encodeURIComponent(sessionId)}&pageSize=8`,
+    token,
+  );
+  const items = (data.mediaItems ?? [])
+    .map((item) => {
+      const file = item.mediaFile ?? {};
+      const mime = typeof file.mimeType === "string" ? file.mimeType : "";
+      const baseUrl = typeof file.baseUrl === "string" ? file.baseUrl : "";
+      const id = safeId(item.id);
+      if (!id || !mime.startsWith("image/") || !baseUrl.startsWith("https://")) return null;
+      return { id, baseUrl, mime };
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+  photoLists.set(key, { at: Date.now(), items });
+  return items;
+}
+
 function cacheKey(token) {
   return createHash("sha256").update(token).digest("hex").slice(0, 16);
 }
@@ -375,6 +446,56 @@ export async function handleApi(request) {
     const body = await request.json().catch(() => null);
     const level = await writeBrightness(body?.level);
     return json({ supported: brightnessSupported() && level != null, level });
+  }
+
+  if (url.pathname === "/api/photos/session" && (request.method === "GET" || request.method === "POST")) {
+    if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+    if (request.method === "POST" && !sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    if (!cookies.gi_at) return json({ error: "reconnect" }, { status: 401 });
+    try {
+      if (request.method === "POST") {
+        const session = await createPhotoSession(cookies.gi_at);
+        const uri = pickerUri(session.pickerUri);
+        const id = safeId(session.id);
+        if (!uri || !id) return json({ error: "unreachable" }, { status: 502 });
+        return json({ id, pickerUri: uri, pollMs: pollMs(session) });
+      }
+      const id = safeId(url.searchParams.get("id"));
+      if (!id) return json({ error: "bad_request" }, { status: 400 });
+      const session = await googleFetch(`https://photospicker.googleapis.com/v1/sessions/${id}`, cookies.gi_at);
+      const ready = Boolean(session.mediaItemsSet);
+      const items = ready ? (await listPicked(cookies.gi_at, id)).map((item) => ({ id: item.id })) : [];
+      return json({ id, mediaItemsSet: ready, pollMs: ready ? 0 : pollMs(session), items });
+    } catch (error) {
+      if (error?.status === 401 || error?.status === 403) return json({ error: "reconnect" }, { status: 401 });
+      return json({ error: "unreachable" }, { status: 502 });
+    }
+  }
+
+  if (url.pathname === "/api/photos/media" && request.method === "GET") {
+    if (!cookies.gi_at) return json({ error: "reconnect" }, { status: 401 });
+    const sessionId = safeId(url.searchParams.get("session"));
+    const itemId = safeId(url.searchParams.get("item"));
+    if (!sessionId || !itemId) return json({ error: "bad_request" }, { status: 400 });
+    try {
+      const item = (await listPicked(cookies.gi_at, sessionId)).find((entry) => entry.id === itemId);
+      if (!item) return json({ error: "not_found" }, { status: 404 });
+      const image = await fetch(`${item.baseUrl}=w480-h480`, {
+        headers: { authorization: `Bearer ${cookies.gi_at}` },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!image.ok) return json({ error: "unreachable" }, { status: 502 });
+      const bytes = Buffer.from(await image.arrayBuffer());
+      if (bytes.length > 2_000_000) return json({ error: "unreachable" }, { status: 502 });
+      const type = image.headers.get("content-type") ?? item.mime;
+      if (!type.startsWith("image/")) return json({ error: "unreachable" }, { status: 502 });
+      return new Response(bytes, {
+        headers: { "content-type": type, "cache-control": "private, max-age=300" },
+      });
+    } catch (error) {
+      if (error?.status === 401 || error?.status === 403) return json({ error: "reconnect" }, { status: 401 });
+      return json({ error: "unreachable" }, { status: 502 });
+    }
   }
 
   if (url.pathname === "/api/auth/google" && request.method === "GET") {

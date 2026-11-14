@@ -3,6 +3,7 @@ import type { CalendarEvent, IslandContact, IslandNotice, IslandPhoto, LiveState
 import { formatWhen } from "./desk.ts";
 import { seoulFace } from "./format.ts";
 import type { PeekId } from "./types.ts";
+import { useGooglePhotos } from "./useGooglePhotos.ts";
 
 function GoogleRow({
   live,
@@ -99,6 +100,7 @@ export function PeekView({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const face = seoulFace(now, null);
+  const googlePhotos = useGooglePhotos(id === "photos" && live.connected);
   const [dragged, setDragged] = useState<number | null>(null);
   const bright = dragged ?? brightness.level ?? 70;
 
@@ -130,20 +132,36 @@ export function PeekView({
   }
 
   if (id === "photos") {
+    const google = googlePhotos.photos;
     return (
       <div className="peek stack">
         <div className="peek-head">
           <h2>Photos</h2>
-          <span className="badge live">This device</span>
+          <span className={live.connected ? "badge live" : "badge"}>{live.connected ? "Google Photos" : "This device"}</span>
         </div>
-        {photos.length ? (
+        {google.length || photos.length ? (
           <div className="photo-grid peek-scroll">
+            {google.map((photo) => (
+              <img
+                key={`${photo.sessionId}-${photo.id}`}
+                src={`/api/photos/media?session=${encodeURIComponent(photo.sessionId)}&item=${encodeURIComponent(photo.id)}`}
+                alt=""
+              />
+            ))}
             {photos.map((photo) => (
               <img key={photo.id} src={photo.url} alt="" />
             ))}
           </div>
         ) : (
-          <p className="fine">Nothing saved on the island yet.</p>
+          <p className="fine">
+            {googlePhotos.error === "reconnect"
+              ? "Connect Google again so Photos can open."
+              : googlePhotos.picking
+                ? "Pick the pictures in Google Photos. They land here when you finish."
+                : live.connected
+                  ? "Nothing chosen from Google Photos yet."
+                  : "Choose pictures from Google Photos, or add one from this device."}
+          </p>
         )}
         <input
           ref={fileRef}
@@ -156,9 +174,34 @@ export function PeekView({
             event.target.value = "";
           }}
         />
-        <button type="button" className="link-btn" onClick={() => fileRef.current?.click()}>
-          Add from this device
-        </button>
+        <div className="photo-actions">
+          {live.connected ? (
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                const popup = window.open("about:blank", "_blank");
+                void googlePhotos.choose(popup);
+              }}
+            >
+              Choose in Google Photos
+            </button>
+          ) : live.googleConfigured ? (
+            <a className="link-btn" href="/api/auth/google">
+              Connect Google
+            </a>
+          ) : (
+            <p className="fine">Sample, until Google is connected.</p>
+          )}
+          {googlePhotos.error === "reconnect" ? (
+            <a className="text-btn" href="/api/auth/google">
+              Connect again
+            </a>
+          ) : null}
+          <button type="button" className="text-btn" onClick={() => fileRef.current?.click()}>
+            Add from this device
+          </button>
+        </div>
       </div>
     );
   }
@@ -240,7 +283,7 @@ export function PeekView({
           <li>Weather · Seoul, live</li>
           <li>Mail · {live.connected ? live.account ?? "Google" : "sample until Google connects"}</li>
           <li>Calendar · {live.calendar.source === "google" ? "Google, today" : "sample until Google connects"}</li>
-          <li>Photos · this device</li>
+          <li>Photos · {live.connected ? "Google Photos" : "this device until Google connects"}</li>
           <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
           <li>Music · system media keys</li>
           <li>Radio · live stations</li>
