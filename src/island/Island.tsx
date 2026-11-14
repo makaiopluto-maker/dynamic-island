@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { CSSProperties, ReactNode } from "react";
 import { Cover } from "./Cover.tsx";
-import type { IslandContact, IslandNotice, IslandPhoto, LiveState } from "./desk.ts";
+import type { IslandContact, IslandPhoto, LiveState } from "./desk.ts";
 import { Dock } from "./Dock.tsx";
 import { PeekView } from "./peeks.tsx";
 import { StatusBar } from "./StatusBar.tsx";
@@ -44,7 +44,6 @@ export function Island({
   celsius,
   photos,
   contacts,
-  notices,
   contactsSupported,
   mailCount,
   eventTitle,
@@ -75,7 +74,6 @@ export function Island({
   celsius: number | null;
   photos: IslandPhoto[];
   contacts: IslandContact[];
-  notices: IslandNotice[];
   contactsSupported: boolean;
   mailCount: number;
   eventTitle: string;
@@ -131,7 +129,6 @@ export function Island({
         live={live}
         photos={photos}
         contacts={contacts}
-        notices={notices}
         contactsSupported={contactsSupported}
         brightness={brightness}
         onBrightness={brightness.set}

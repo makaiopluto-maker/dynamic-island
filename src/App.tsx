@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { contactsSupported, soonEvent, useContacts, useLive, useNotices, usePhotos, useWeather } from "./island/desk.ts";
+import { contactsSupported, soonEvent, useContacts, useLive, usePhotos, useWeather } from "./island/desk.ts";
 import { Island } from "./island/Island.tsx";
 import { frameFor } from "./island/data.ts";
 import { mastHeight } from "./island/format.ts";
@@ -27,7 +27,6 @@ export default function App() {
   const celsius = useWeather();
   const { photos, add: addPhotos } = usePhotos();
   const { contacts, pick: pickContacts } = useContacts();
-  const notices = useNotices();
   const unread = live.mail.source === "google" ? live.mail.messages.filter((message) => message.unread).length : 0;
   const upcoming = live.calendar.source === "google" ? soonEvent(live.calendar.events, now) : null;
 
@@ -142,7 +141,6 @@ export default function App() {
           celsius={celsius}
           photos={photos}
           contacts={contacts}
-          notices={notices}
           contactsSupported={contactsSupported()}
           mailCount={unread}
           eventTitle={upcoming?.title ?? "Next up"}

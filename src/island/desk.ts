@@ -210,6 +210,66 @@ export function useContacts() {
   return { contacts, pick, supported: contactsSupported() };
 }
 
+const CHAT_KEY = "island-chats";
+
+export type IslandChatMessage = { id: string; text: string; at: string };
+export type IslandChat = { id: string; name: string; messages: IslandChatMessage[] };
+
+function readChats(): IslandChat[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CHAT_KEY) ?? "[]") as IslandChat[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((chat) => typeof chat?.id === "string" && typeof chat?.name === "string" && Array.isArray(chat.messages));
+  } catch {
+    return [];
+  }
+}
+
+export function useChats() {
+  const [chats, setChats] = useState<IslandChat[]>(() => readChats());
+
+  const write = useCallback((next: IslandChat[]) => {
+    localStorage.setItem(CHAT_KEY, JSON.stringify(next));
+    setChats(next);
+  }, []);
+
+  const start = useCallback(
+    (name: string, text: string) => {
+      const title = name.trim().slice(0, 40);
+      const body = text.trim().slice(0, 500);
+      if (!title || !body) return null;
+      const chat: IslandChat = {
+        id: crypto.randomUUID(),
+        name: title,
+        messages: [{ id: crypto.randomUUID(), text: body, at: new Date().toISOString() }],
+      };
+      write([chat, ...readChats()].slice(0, 30));
+      return chat.id;
+    },
+    [write],
+  );
+
+  const send = useCallback(
+    (id: string, text: string) => {
+      const body = text.trim().slice(0, 500);
+      if (!body) return;
+      const next = readChats().map((chat) =>
+        chat.id === id
+          ? {
+              ...chat,
+              messages: [...chat.messages, { id: crypto.randomUUID(), text: body, at: new Date().toISOString() }].slice(-80),
+            }
+          : chat,
+      );
+      const current = next.find((chat) => chat.id === id);
+      write(current ? [current, ...next.filter((chat) => chat.id !== id)] : next);
+    },
+    [write],
+  );
+
+  return { chats, start, send };
+}
+
 const NOTICE_KEY = "island-notices";
 
 export function readNotices(): IslandNotice[] {

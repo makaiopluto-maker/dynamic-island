@@ -1029,6 +1029,18 @@ input:focus-visible {
   white-space: pre-wrap;
 }
 .bubble.user { margin-left: auto; background: rgba(255, 255, 255, 0.16); }
+.bubble-time { display: block; margin-top: 4px; font-size: 10px; opacity: 0.6; }
+.chat-row { width: 100%; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.chat-name, .chat-draft {
+  width: 100%;
+  border: 0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  font: inherit;
+}
+.chat-draft { resize: none; }
 .bubble.model { background: rgba(90, 130, 255, 0.28); }
 .ask { display: flex; gap: 8px; align-items: center; }
 .ask input {

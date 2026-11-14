@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import type { CalendarEvent, IslandContact, IslandNotice, IslandPhoto, LiveState, MailMessage } from "./desk.ts";
-import { formatWhen } from "./desk.ts";
+import type { CalendarEvent, IslandChat, IslandContact, IslandPhoto, LiveState, MailMessage } from "./desk.ts";
+import { formatWhen, useChats } from "./desk.ts";
 import { seoulFace } from "./format.ts";
 import type { PeekId } from "./types.ts";
 import { useGooglePhotos } from "./useGooglePhotos.ts";
@@ -77,7 +77,6 @@ export function PeekView({
   live,
   photos,
   contacts,
-  notices,
   contactsSupported,
   brightness,
   onBrightness,
@@ -90,7 +89,6 @@ export function PeekView({
   live: LiveState;
   photos: IslandPhoto[];
   contacts: IslandContact[];
-  notices: IslandNotice[];
   contactsSupported: boolean;
   brightness: { level: number | null; supported: boolean };
   onBrightness: (level: number) => void;
@@ -241,37 +239,7 @@ export function PeekView({
     );
   }
 
-  if (id === "messages") {
-    return (
-      <div className="peek stack">
-        <div className="peek-head">
-          <h2>Messages</h2>
-          <span className="badge">On device</span>
-        </div>
-        <p className="fine">Texts stay on the phone. Alerts from the island land here.</p>
-        <ul className="peek-scroll rows">
-          {notices.map((notice) => (
-            <li key={notice.id} className="row">
-              <i className="dot on" />
-              <span>
-                <strong>{notice.title}</strong>
-                <em>{notice.body}</em>
-              </span>
-            </li>
-          ))}
-          {contacts.map((contact) => (
-            <li key={`sms-${contact.tel}`} className="row">
-              <i className="dot" />
-              <span>
-                <strong>{contact.name}</strong>
-                <a href={`sms:${contact.tel}`}>Text {contact.name}</a>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
+  if (id === "messages") return <MessagesPeek />;
 
   if (id === "plus") {
     return (
@@ -285,6 +253,7 @@ export function PeekView({
           <li>Calendar · {live.calendar.source === "google" ? "Google, today" : "sample until Google connects"}</li>
           <li>Photos · {live.connected ? "Google Photos" : "this device until Google connects"}</li>
           <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
+          <li>Messages · kept in this island</li>
           <li>Music · {live.connected ? "YouTube Music" : "sample until Google connects"}</li>
           <li>Radio · live stations</li>
           <li>Gemini · in this island</li>
@@ -320,6 +289,155 @@ export function PeekView({
           ? "This slider moves the monitor on this PC."
           : "The Windows app on this PC moves the monitor. This copy only shows the level."}
       </p>
+    </div>
+  );
+}
+
+function messageWhen(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function MessagesPeek() {
+  const { chats, start, send } = useChats();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [name, setName] = useState("");
+  const [draft, setDraft] = useState("");
+  const open = chats.find((chat) => chat.id === openId) ?? null;
+
+  if (composing) {
+    return (
+      <form
+        className="peek stack"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const id = start(name, draft);
+          if (!id) return;
+          setName("");
+          setDraft("");
+          setComposing(false);
+          setOpenId(id);
+        }}
+      >
+        <div className="peek-head">
+          <h2>New message</h2>
+          <button type="button" className="text-btn" onClick={() => setComposing(false)}>
+            Back
+          </button>
+        </div>
+        <input
+          className="chat-name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Name"
+          aria-label="Name"
+          maxLength={40}
+        />
+        <textarea
+          className="chat-draft"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Message"
+          aria-label="Message"
+          maxLength={500}
+          rows={3}
+        />
+        <button type="submit" className="link-btn">
+          Send
+        </button>
+      </form>
+    );
+  }
+
+  if (open) return <ChatThread chat={open} draft={draft} onDraft={setDraft} onBack={() => setOpenId(null)} onSend={send} />;
+
+  return (
+    <div className="peek stack">
+      <div className="peek-head">
+        <h2>Messages</h2>
+        <span className="badge live">Island</span>
+      </div>
+      {chats.length ? (
+        <ul className="peek-scroll rows">
+          {chats.map((chat) => {
+            const last = chat.messages.at(-1);
+            return (
+              <li key={chat.id}>
+                <button type="button" className="row chat-row" onClick={() => setOpenId(chat.id)}>
+                  <i className="dot on" />
+                  <span>
+                    <strong>{chat.name}</strong>
+                    <em>{last?.text ?? "No message yet"}</em>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="fine">No conversations yet. Messages stay in the island.</p>
+      )}
+      <button type="button" className="link-btn" onClick={() => setComposing(true)}>
+        New message
+      </button>
+    </div>
+  );
+}
+
+function ChatThread({
+  chat,
+  draft,
+  onDraft,
+  onBack,
+  onSend,
+}: {
+  chat: IslandChat;
+  draft: string;
+  onDraft: (value: string) => void;
+  onBack: () => void;
+  onSend: (id: string, text: string) => void;
+}) {
+  return (
+    <div className="peek stack">
+      <div className="peek-head">
+        <h2>{chat.name}</h2>
+        <button type="button" className="text-btn" onClick={onBack}>
+          Back
+        </button>
+      </div>
+      <div className="thread peek-scroll">
+        {chat.messages.map((message) => (
+          <p key={message.id} className="bubble user">
+            {message.text}
+            <span className="bubble-time">{messageWhen(message.at)}</span>
+          </p>
+        ))}
+      </div>
+      <form
+        className="ask"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSend(chat.id, draft);
+          onDraft("");
+        }}
+      >
+        <input
+          value={draft}
+          onChange={(event) => onDraft(event.target.value)}
+          placeholder="Message"
+          aria-label={`Message ${chat.name}`}
+          maxLength={500}
+        />
+        <button type="submit" className="link-btn">
+          Send
+        </button>
+      </form>
     </div>
   );
 }
