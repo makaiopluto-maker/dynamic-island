@@ -33,11 +33,13 @@ npm run dev
 - **Gemini**는 로그인한 사람만 쓸 수 있습니다. 로그인하지 않은 요청은 키를 호출하지 않습니다.
 - 프로덕션 서버는 `npm run build` 다음 `npm start` 입니다. 개발 서버의 `/api`도 같은 연결을 씁니다.
 
-## 윈도우 앱
+## 윈도우 설치 파일
 
-모니터 밝기는 이 컴퓨터에서 앱을 실행할 때 동작합니다.
+윈도우 64비트 설치 파일은 `Dynamic-Island-Setup.exe` 입니다. 실행하면 설치 폴더를 고르고, 바탕화면과 시작 메뉴에 Dynamic Island가 생깁니다. 창이 열리면 아일랜드와 라디오 서버가 그 컴퓨터에서 함께 켜집니다. 모니터 밝기는 이 설치본에서만 바뀝니다.
+
+개발 중에 같은 창을 보려면:
 
 ```bash
 npm run build
-npx --yes electron electron/main.mjs
+npm run desktop
 ```

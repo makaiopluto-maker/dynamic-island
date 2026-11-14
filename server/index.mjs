@@ -4,7 +4,8 @@ import { extname, join, resolve, sep } from "node:path";
 import { handleApi, toWebRequest, writeNodeResponse } from "./api.mjs";
 
 const port = Number(process.env.PORT) || 4731;
-const root = join(process.cwd(), "dist");
+const host = process.env.HOST || "0.0.0.0";
+const root = join(process.env.ISLAND_ROOT || process.cwd(), "dist");
 const types = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -50,4 +51,4 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(port, "0.0.0.0");
+server.listen(port, host);
