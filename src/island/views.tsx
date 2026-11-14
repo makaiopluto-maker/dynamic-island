@@ -1,17 +1,22 @@
+import { useEffect, useRef } from "react";
 import { Cover } from "./Cover.tsx";
 import { formatElapsed, formatRemaining } from "./format.ts";
 import { AirplayIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
 import type { Compact } from "./types.ts";
+import type { LiveState } from "./desk.ts";
 import type { useMusic } from "./useActivities.ts";
 import type { useRadio } from "./useRadio.ts";
+import type { useYouTube } from "./useYouTube.ts";
 
 type Music = ReturnType<typeof useMusic>;
 type Radio = ReturnType<typeof useRadio>;
+type YouTube = ReturnType<typeof useYouTube>;
 
 export function CompactFace({
   compact,
   music,
   radio,
+  youtube,
   onOpen,
   onPeek,
   mailCount,
@@ -20,22 +25,26 @@ export function CompactFace({
   compact: Compact;
   music: Music;
   radio: Radio;
+  youtube: YouTube;
   onOpen: (target: "home" | "music" | "radio" | "gemini") => void;
   onPeek: (id: "mail" | "calendar") => void;
   mailCount: number;
   eventTitle: string;
 }) {
   if (compact === "music") {
-    const progress = Math.min(100, (music.position / music.track.duration) * 100);
+    const title = youtube.playing && youtube.track ? youtube.track.title : music.track.title;
+    const position = youtube.playing && youtube.track ? youtube.position : music.position;
+    const duration = youtube.playing && youtube.track ? Math.max(youtube.duration, 1) : music.track.duration;
+    const progress = Math.min(100, (position / duration) * 100);
     return (
-      <button type="button" className="compact" onClick={() => onOpen("music")} aria-label={`Open ${music.track.title}`}>
+      <button type="button" className="compact" onClick={() => onOpen("music")} aria-label={`Open ${title}`}>
         <span className="mini-disc">
           <Cover theme={music.track.theme} />
         </span>
         <span className="bars" aria-hidden="true">
           <i /><i /><i /><i />
         </span>
-        <span className="compact-title">{music.track.title}</span>
+        <span className="compact-title">{title}</span>
         <span className="compact-progress" aria-hidden="true">
           <span style={{ width: `${progress}%` }} />
         </span>
@@ -81,6 +90,7 @@ export function CompactFace({
 export function HomeView({
   music,
   radio,
+  youtube,
   geminiLine,
   onMusic,
   onGemini,
@@ -88,11 +98,15 @@ export function HomeView({
 }: {
   music: Music;
   radio: Radio;
+  youtube: YouTube;
   geminiLine: string;
   onMusic: () => void;
   onGemini: () => void;
   onRadio: () => void;
 }) {
+  const title = youtube.track?.title ?? music.track.title;
+  const artist = youtube.track?.artist ?? music.track.artist;
+  const playing = youtube.track ? youtube.playing : music.playing;
   return (
     <div className="cards">
       <button type="button" className="card card-gemini" onClick={onGemini}>
@@ -105,11 +119,11 @@ export function HomeView({
       <button type="button" className="card card-music" onClick={onMusic}>
         <Cover theme={music.track.theme} />
         <span className="play-orb" aria-hidden="true">
-          {music.playing ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
+          {playing ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
         </span>
         <span className="card-copy">
-          <span className="card-title">{music.track.title}</span>
-          <span className="card-artist">{music.track.artist}</span>
+          <span className="card-title">{title}</span>
+          <span className="card-artist">{artist}</span>
         </span>
       </button>
       <button type="button" className="card card-radio" onClick={onRadio}>
@@ -123,11 +137,20 @@ export function HomeView({
   );
 }
 
-export function MusicView({ music, deviceHere, onToggleDevice }: {
+export function MusicView({
+  music,
+  youtube,
+  live,
+  deviceHere,
+  onToggleDevice,
+}: {
   music: Music;
+  youtube: YouTube;
+  live: LiveState;
   deviceHere: boolean;
   onToggleDevice: () => void;
 }) {
+  if (live.connected) return <YouTubeMusic youtube={youtube} attach={youtube.attach} />;
   const progress = (music.position / music.track.duration) * 100;
   return (
     <div className="music-stage">
@@ -185,6 +208,112 @@ export function MusicView({ music, deviceHere, onToggleDevice }: {
           aria-label={deviceHere ? "Playing in this window" : "Play in this window"}
         >
           <AirplayIcon />
+        </button>
+      </div>
+      {live.googleConfigured ? (
+        <a className="link-btn music-connect" href="/api/auth/google">
+          Play from YouTube Music
+        </a>
+      ) : (
+        <p className="fine music-connect">Sample, until Google is connected.</p>
+      )}
+    </div>
+  );
+}
+
+function YouTubeMusic({ youtube, attach }: { youtube: YouTube; attach: YouTube["attach"] }) {
+  const frame = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    attach(frame.current);
+    return () => attach(null);
+  }, [attach]);
+  const length = Math.max(youtube.duration, 1);
+  const progress = (youtube.position / length) * 100;
+  return (
+    <div className="music-stage yt">
+      <div className="yt-layout">
+        <div className="yt-frame" ref={frame} />
+        <div className="yt-side">
+          <p className="music-meta">YouTube Music{youtube.track ? ` · ${youtube.track.artist}` : ""}</p>
+          <p className="lyric">{youtube.track?.title ?? "Your library"}</p>
+          <form
+            className="yt-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void youtube.search();
+            }}
+          >
+            <input
+              value={youtube.query}
+              onChange={(event) => youtube.setQuery(event.target.value)}
+              placeholder="Search songs"
+              aria-label="Search YouTube Music"
+            />
+            <button type="submit" className="link-btn">
+              Search
+            </button>
+          </form>
+          {youtube.error === "reconnect" ? (
+            <a className="text-btn" href="/api/auth/google">
+              Connect again so YouTube Music can open
+            </a>
+          ) : youtube.error === "unreachable" ? (
+            <p className="fine">YouTube Music did not answer.</p>
+          ) : null}
+        </div>
+      </div>
+      {youtube.playlists.length ? (
+        <div className="yt-row">
+          {youtube.playlists.map((playlist) => (
+            <button key={playlist.id} type="button" className="text-btn" onClick={() => void youtube.openPlaylist(playlist.id)}>
+              {playlist.title}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {youtube.tracks.length ? (
+        <div className="yt-row songs">
+          {youtube.tracks.map((track, at) => (
+            <button
+              key={`${track.id}-${at}`}
+              type="button"
+              className={at === youtube.index ? "text-btn on" : "text-btn"}
+              onClick={() => youtube.playAt(at)}
+            >
+              {track.title}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="fine">Search YouTube Music, or open a playlist.</p>
+      )}
+      <div className="transport">
+        <button type="button" className="orb" onClick={youtube.toggle} aria-label={youtube.playing ? "Pause" : "Play"} aria-pressed={youtube.playing}>
+          {youtube.playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
+        </button>
+        <span className="elapsed">{formatElapsed(youtube.position)}</span>
+        <input
+          className="scrub"
+          type="range"
+          min={0}
+          max={length}
+          step={0.25}
+          value={Math.min(youtube.position, length)}
+          aria-label="Playback position"
+          style={{ ["--p" as string]: `${progress}%` }}
+          onChange={(event) => youtube.seek(Number(event.target.value))}
+        />
+        <span className="remain">{formatRemaining(Math.max(0, youtube.duration - youtube.position))}</span>
+      </div>
+      <div className="skiprow">
+        <button type="button" className="icon-btn" onClick={youtube.prev} aria-label="Previous">
+          <PrevIcon />
+        </button>
+        <button type="button" className="icon-btn main" onClick={youtube.toggle} aria-label={youtube.playing ? "Pause" : "Play"}>
+          {youtube.playing ? <PauseIcon size={22} /> : <PlayIcon size={22} />}
+        </button>
+        <button type="button" className="icon-btn" onClick={youtube.next} aria-label="Next">
+          <NextIcon />
         </button>
       </div>
     </div>

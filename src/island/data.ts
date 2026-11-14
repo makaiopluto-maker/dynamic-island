@@ -82,6 +82,7 @@ export function frameFor(
   viewportHeight: number,
   mast: number,
   peek: PeekId,
+  youtube = false,
 ): Frame {
   const wide = Math.min(760, viewportWidth - 24);
   const narrow = viewportWidth < 720;
@@ -106,7 +107,7 @@ export function frameFor(
     return fit(narrow ? 460 : 360, 30);
   }
   if (view === "home") return fit(narrow ? 508 : 292, narrow ? 28 : 36);
-  if (view === "music") return fit(narrow ? 492 : 328, 36);
+  if (view === "music") return fit(youtube ? (narrow ? 680 : 500) : narrow ? 520 : 360, 36);
   if (view === "gemini") return fit(narrow ? 520 : 420, 36);
   if (view === "radio") return fit(narrow ? 460 : 340, 36);
   return fit(narrow ? 312 : 280, 36);

@@ -6,6 +6,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
+  "https://www.googleapis.com/auth/youtube.readonly",
   "email",
 ].join(" ");
 
@@ -337,6 +338,126 @@ function sameOrigin(request) {
   return Boolean(origin) && origin === new URL(request.url).origin;
 }
 
+function decodeXml(value) {
+  return String(value)
+    .replaceAll("&amp;", "&")
+    .replaceAll("&quot;", "\"")
+    .replaceAll("&#39;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">");
+}
+
+function videoId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{11}$/.test(value) ? value : null;
+}
+
+function playlistId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{2,80}$/.test(value) ? value : null;
+}
+
+function ytTrack(video, snippet) {
+  const id = videoId(video);
+  if (!id) return null;
+  return {
+    id,
+    title: decodeXml(snippet?.title || "YouTube Music").slice(0, 140),
+    artist: decodeXml(snippet?.channelTitle || "YouTube Music").slice(0, 80),
+  };
+}
+
+async function youtubeSearch(token, q) {
+  const params = new URLSearchParams({
+    part: "snippet",
+    type: "video",
+    videoCategoryId: "10",
+    videoEmbeddable: "true",
+    maxResults: "8",
+    q,
+  });
+  const data = await googleFetch(`https://www.googleapis.com/youtube/v3/search?${params}`, token);
+  return (data.items ?? []).map((item) => ytTrack(item.id?.videoId, item.snippet)).filter(Boolean);
+}
+
+async function youtubePlaylistTracks(token, id) {
+  const params = new URLSearchParams({
+    part: "snippet,contentDetails",
+    maxResults: "12",
+    playlistId: id,
+  });
+  const data = await googleFetch(`https://www.googleapis.com/youtube/v3/playlistItems?${params}`, token);
+  return (data.items ?? []).map((item) => ytTrack(item.contentDetails?.videoId, item.snippet)).filter(Boolean);
+}
+
+async function youtubeLibrary(token) {
+  const [listsResult, channelResult] = await Promise.allSettled([
+    googleFetch(
+      "https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&mine=true&maxResults=6",
+      token,
+    ),
+    googleFetch("https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true", token),
+  ]);
+  const denied = [listsResult, channelResult].find(
+    (result) => result.status === "rejected" && (result.reason?.status === 401 || result.reason?.status === 403),
+  );
+  if (listsResult.status === "rejected" && (listsResult.reason?.status === 401 || listsResult.reason?.status === 403)) {
+    throw listsResult.reason;
+  }
+  if (denied && listsResult.status === "rejected") throw denied.reason;
+  const playlists = listsResult.status === "fulfilled"
+    ? (listsResult.value.items ?? [])
+        .map((item) => {
+          const id = playlistId(item.id);
+          if (!id) return null;
+          return {
+            id,
+            title: decodeXml(item.snippet?.title || "Playlist").slice(0, 80),
+            count: Number(item.contentDetails?.itemCount) || 0,
+          };
+        })
+        .filter(Boolean)
+    : [];
+  const likes = channelResult.status === "fulfilled"
+    ? playlistId(channelResult.value.items?.[0]?.contentDetails?.relatedPlaylists?.likes)
+    : null;
+  const rows = likes ? [{ id: likes, title: "Liked", count: 0 }, ...playlists.filter((item) => item.id !== likes)] : playlists;
+  const first = rows[0];
+  let tracks = [];
+  if (first) {
+    try {
+      tracks = await youtubePlaylistTracks(token, first.id);
+    } catch (error) {
+      if (error?.status === 401) throw error;
+      tracks = [];
+    }
+  }
+  return { playlists: rows.slice(0, 6), tracks };
+}
+
+const youtubeHits = new Map();
+
+async function youtubeRoute(request, credentials, cookies, run) {
+  if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+  if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+  if (!cookies.gi_at) return json({ error: "reconnect" }, { status: 401 });
+  if (youtubeLimited(request)) return json({ error: "limited" }, { status: 429 });
+  try {
+    return await run(cookies.gi_at);
+  } catch (error) {
+    if (error?.status === 401 || error?.status === 403) return json({ error: "reconnect" }, { status: 401 });
+    return json({ error: "unreachable" }, { status: 502 });
+  }
+}
+
+function youtubeLimited(request) {
+  const ip = (request.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim() || "local";
+  const now = Date.now();
+  const recent = (youtubeHits.get(ip) ?? []).filter((stamp) => now - stamp < 60_000);
+  if (recent.length >= 30) return true;
+  recent.push(now);
+  youtubeHits.set(ip, recent);
+  return false;
+}
+
 function geminiLimited(request) {
   const ip = (request.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim() || "local";
   const now = Date.now();
@@ -434,6 +555,26 @@ export async function handleApi(request) {
     } catch {
       return json({ error: "unreachable" }, { status: 502 });
     }
+  }
+
+  if (url.pathname === "/api/youtube/search" && request.method === "GET") {
+    return youtubeRoute(request, credentials, cookies, async (token) => {
+      const q = (url.searchParams.get("q") ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+      if (!q) return json({ error: "bad_request" }, { status: 400 });
+      return json({ tracks: await youtubeSearch(token, q) });
+    });
+  }
+
+  if (url.pathname === "/api/youtube/library" && request.method === "GET") {
+    return youtubeRoute(request, credentials, cookies, async (token) => json(await youtubeLibrary(token)));
+  }
+
+  if (url.pathname === "/api/youtube/playlist" && request.method === "GET") {
+    return youtubeRoute(request, credentials, cookies, async (token) => {
+      const id = playlistId(url.searchParams.get("id"));
+      if (!id) return json({ error: "bad_request" }, { status: 400 });
+      return json({ tracks: await youtubePlaylistTracks(token, id) });
+    });
   }
 
   if (url.pathname === "/api/brightness" && request.method === "GET") {

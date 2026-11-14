@@ -8,6 +8,7 @@ import { useMusic, useNow, useViewport } from "./island/useActivities.ts";
 import { useBrightness } from "./island/useBrightness.ts";
 import { useGemini } from "./island/useGemini.ts";
 import { useRadio } from "./island/useRadio.ts";
+import { useYouTube } from "./island/useYouTube.ts";
 import { Room } from "./scene/Room.tsx";
 
 export default function App() {
@@ -15,13 +16,14 @@ export default function App() {
   const now = useNow();
   const music = useMusic();
   const radio = useRadio();
+  const { live, disconnect } = useLive();
+  const youtube = useYouTube(live.connected);
   const gemini = useGemini();
   const brightness = useBrightness();
   const [opened] = useState(() => new URLSearchParams(window.location.search).get("open"));
   const [view, setView] = useState<View>(() => (opened === "mail" ? "peek" : "idle"));
   const [peek, setPeek] = useState<PeekId>(() => (opened === "mail" ? "mail" : "plus"));
   const [deviceHere, setDeviceHere] = useState(true);
-  const { live, disconnect } = useLive();
   const celsius = useWeather();
   const { photos, add: addPhotos } = usePhotos();
   const { contacts, pick: pickContacts } = useContacts();
@@ -29,10 +31,10 @@ export default function App() {
   const unread = live.mail.source === "google" ? live.mail.messages.filter((message) => message.unread).length : 0;
   const upcoming = live.calendar.source === "google" ? soonEvent(live.calendar.events, now) : null;
 
-  const compact: Compact = compactFor(radio.playing, music.playing, unread, upcoming?.title ?? "");
+  const compact: Compact = compactFor(radio.playing, youtube.playing || music.playing, unread, upcoming?.title ?? "");
   const dim = brightness.level != null && brightness.level <= 30;
   const mast = mastHeight(viewport.h);
-  const frame = frameFor(view, compact, viewport.w, viewport.h, mast, peek);
+  const frame = frameFor(view, compact, viewport.w, viewport.h, mast, peek, live.connected);
 
   useEffect(() => {
     if (opened || new URLSearchParams(window.location.search).has("google")) {
@@ -57,8 +59,11 @@ export default function App() {
       if (event.key === " ") {
         if (view === "music") {
           event.preventDefault();
-          if (!music.playing) radio.stop();
-          music.toggle();
+          radio.stop();
+          if (live.connected) {
+            music.pause();
+            youtube.toggle();
+          } else music.toggle();
         } else if (view === "radio") {
           event.preventDefault();
           if (!radio.playing) music.pause();
@@ -68,11 +73,18 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view, music, radio]);
+  }, [view, live.connected, music, radio, youtube]);
+
+  useEffect(() => {
+    if (!youtube.playing) return;
+    music.pause();
+    radio.stop();
+  }, [youtube.playing, music, radio]);
 
   const openMusic = () => {
     radio.stop();
-    music.play();
+    if (live.connected) music.pause();
+    else music.play();
     setView("music");
   };
 
@@ -109,6 +121,7 @@ export default function App() {
           now={now}
           music={music}
           radio={radio}
+          youtube={youtube}
           gemini={gemini}
           brightness={brightness}
           deviceHere={deviceHere}

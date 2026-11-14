@@ -11,10 +11,12 @@ import type { useMusic } from "./useActivities.ts";
 import type { useBrightness } from "./useBrightness.ts";
 import type { useGemini } from "./useGemini.ts";
 import type { useRadio } from "./useRadio.ts";
+import type { useYouTube } from "./useYouTube.ts";
 import { CompactFace, HomeView, MusicView } from "./views.tsx";
 
 type Music = ReturnType<typeof useMusic>;
 type Radio = ReturnType<typeof useRadio>;
+type YouTube = ReturnType<typeof useYouTube>;
 type Gemini = ReturnType<typeof useGemini>;
 type Brightness = ReturnType<typeof useBrightness>;
 
@@ -27,6 +29,7 @@ export function Island({
   now,
   music,
   radio,
+  youtube,
   gemini,
   brightness,
   deviceHere,
@@ -57,6 +60,7 @@ export function Island({
   now: Date;
   music: Music;
   radio: Radio;
+  youtube: YouTube;
   gemini: Gemini;
   brightness: Brightness;
   deviceHere: boolean;
@@ -92,6 +96,7 @@ export function Island({
         compact={compact}
         music={music}
         radio={radio}
+        youtube={youtube}
         onOpen={onOpen}
         onPeek={onPeek}
         mailCount={mailCount}
@@ -103,6 +108,7 @@ export function Island({
       <HomeView
         music={music}
         radio={radio}
+        youtube={youtube}
         geminiLine={gemini.lastReply ? gemini.lastReply.slice(0, 42) : "In this island"}
         onMusic={onMusic}
         onGemini={() => onOpen("gemini")}
@@ -111,7 +117,7 @@ export function Island({
     );
   } else if (view === "music") {
     stage = (
-      <MusicView music={music} deviceHere={deviceHere} onToggleDevice={onToggleDevice} />
+      <MusicView music={music} youtube={youtube} live={live} deviceHere={deviceHere} onToggleDevice={onToggleDevice} />
     );
   } else if (view === "gemini") {
     stage = <GeminiView gemini={gemini} />;

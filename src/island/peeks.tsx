@@ -285,7 +285,7 @@ export function PeekView({
           <li>Calendar · {live.calendar.source === "google" ? "Google, today" : "sample until Google connects"}</li>
           <li>Photos · {live.connected ? "Google Photos" : "this device until Google connects"}</li>
           <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
-          <li>Music · system media keys</li>
+          <li>Music · {live.connected ? "YouTube Music" : "sample until Google connects"}</li>
           <li>Radio · live stations</li>
           <li>Gemini · in this island</li>
           <li>Lights · {brightness.supported ? "this monitor" : "the Windows app on this PC"}</li>
