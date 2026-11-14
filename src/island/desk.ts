@@ -213,13 +213,43 @@ export function useContacts() {
 const CHAT_KEY = "island-chats";
 
 export type IslandChatMessage = { id: string; text: string; at: string };
-export type IslandChat = { id: string; name: string; messages: IslandChatMessage[] };
+export type IslandChat = { id: string; name: string; phone: string; messages: IslandChatMessage[] };
+
+export function smsAddress(raw: string) {
+  const compact = raw.replace(/[^\d+]/g, "");
+  if (compact.startsWith("+")) return compact.slice(0, 16);
+  const digits = compact.replace(/\D/g, "");
+  if (digits.length < 8) return "";
+  if (digits.startsWith("0")) return `+82${digits.slice(1)}`.slice(0, 16);
+  return digits.slice(0, 16);
+}
+
+export function smsHref(phone: string, body: string) {
+  const address = smsAddress(phone);
+  const text = body.trim();
+  if (!address || !text) return "";
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return `sms:${address}${ios ? "&" : "?"}body=${encodeURIComponent(text)}`;
+}
+
+export function openText(phone: string, body: string) {
+  const href = smsHref(phone, body);
+  if (!href) return;
+  const link = document.createElement("a");
+  link.href = href;
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
 
 function readChats(): IslandChat[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(CHAT_KEY) ?? "[]") as IslandChat[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((chat) => typeof chat?.id === "string" && typeof chat?.name === "string" && Array.isArray(chat.messages));
+    return parsed.flatMap((chat) => {
+      if (typeof chat?.id !== "string" || typeof chat?.name !== "string" || !Array.isArray(chat.messages)) return [];
+      return [{ ...chat, phone: typeof chat.phone === "string" ? chat.phone : "" }];
+    });
   } catch {
     return [];
   }
@@ -234,16 +264,19 @@ export function useChats() {
   }, []);
 
   const start = useCallback(
-    (name: string, text: string) => {
+    (name: string, phone: string, text: string) => {
       const title = name.trim().slice(0, 40);
+      const address = smsAddress(phone);
       const body = text.trim().slice(0, 500);
-      if (!title || !body) return null;
+      if (!title || !address || !body) return null;
       const chat: IslandChat = {
         id: crypto.randomUUID(),
         name: title,
+        phone: address,
         messages: [{ id: crypto.randomUUID(), text: body, at: new Date().toISOString() }],
       };
       write([chat, ...readChats()].slice(0, 30));
+      openText(address, body);
       return chat.id;
     },
     [write],
@@ -263,6 +296,7 @@ export function useChats() {
       );
       const current = next.find((chat) => chat.id === id);
       write(current ? [current, ...next.filter((chat) => chat.id !== id)] : next);
+      if (current?.phone) openText(current.phone, body);
     },
     [write],
   );

@@ -308,6 +308,7 @@ function MessagesPeek() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [draft, setDraft] = useState("");
   const open = chats.find((chat) => chat.id === openId) ?? null;
 
@@ -317,9 +318,10 @@ function MessagesPeek() {
         className="peek stack"
         onSubmit={(event) => {
           event.preventDefault();
-          const id = start(name, draft);
+          const id = start(name, phone, draft);
           if (!id) return;
           setName("");
+          setPhone("");
           setDraft("");
           setComposing(false);
           setOpenId(id);
@@ -338,6 +340,15 @@ function MessagesPeek() {
           placeholder="Name"
           aria-label="Name"
           maxLength={40}
+        />
+        <input
+          className="chat-name"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          placeholder="01000000000"
+          aria-label="Phone number"
+          inputMode="tel"
+          maxLength={20}
         />
         <textarea
           className="chat-draft"
@@ -381,7 +392,7 @@ function MessagesPeek() {
           })}
         </ul>
       ) : (
-        <p className="fine">No conversations yet. Messages stay in the island.</p>
+        <p className="fine">Add their number. Send opens the phone’s message app with that text.</p>
       )}
       <button type="button" className="link-btn" onClick={() => setComposing(true)}>
         New message
@@ -406,7 +417,10 @@ function ChatThread({
   return (
     <div className="peek stack">
       <div className="peek-head">
-        <h2>{chat.name}</h2>
+        <span>
+          <h2>{chat.name}</h2>
+          {chat.phone ? <p className="fine">{chat.phone}</p> : null}
+        </span>
         <button type="button" className="text-btn" onClick={onBack}>
           Back
         </button>

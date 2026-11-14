@@ -921,6 +921,7 @@ input:focus-visible {
   gap: 10px;
 }
 .peek-head h2 { font-size: 20px; }
+.peek-head .fine { margin: 0; }
 .peek-scroll { overflow: auto; min-height: 0; flex: 1; }
 .rows {
   list-style: none;
