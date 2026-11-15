@@ -9,10 +9,28 @@ export type Station = {
   name: string;
   detail: string;
   url?: string;
+  resolve?: string;
   mhz?: number;
   live?: boolean;
   saved?: boolean;
 };
+
+async function resolveNews(kind: string) {
+  if (kind === "kbs:21") {
+    const response = await fetch("https://cfpwwwapi.kbs.co.kr/api/v1/landing/live/channel_code/21");
+    if (!response.ok) return "";
+    const data = (await response.json()) as { channel_item?: { service_url?: string }[] };
+    const url = data.channel_item?.[0]?.service_url ?? "";
+    return url.startsWith("https://") ? url : "";
+  }
+  if (kind === "sbs:lovepc/lovefm") {
+    const response = await fetch("https://apis.sbs.co.kr/play-api/1.0/livestream/lovepc/lovefm?protocol=hls&ssl=Y");
+    if (!response.ok) return "";
+    const url = (await response.text()).trim();
+    return url.startsWith("https://") ? url : "";
+  }
+  return "";
+}
 
 function builtIn(): Station[] {
   return [
@@ -22,13 +40,18 @@ function builtIn(): Station[] {
       detail: station.detail,
       url: station.url,
     })),
-    ...dial.map((station) => ({
-      id: station.id,
-      name: station.name,
-      detail: station.detail,
-      mhz: station.mhz,
-      live: true,
-    })),
+    ...dial.map((station) => {
+      const row = station as { id: string; name: string; detail: string; mhz: number; url?: string; resolve?: string };
+      return {
+        id: row.id,
+        name: row.name,
+        detail: row.detail,
+        mhz: row.mhz,
+        url: row.url,
+        resolve: row.resolve,
+        live: !row.url && !row.resolve,
+      };
+    }),
   ];
 }
 
@@ -57,7 +80,7 @@ export function useRadio() {
   const stations = useMemo(() => [...builtIn(), ...saved], [saved]);
   const stationsRef = useRef(stations);
   const [index, setIndex] = useState(0);
-  const [mhz, setMhz] = useState(89.1);
+  const [mhz, setMhz] = useState(94.5);
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
   const [tuning, setTuning] = useState(false);
@@ -167,10 +190,37 @@ export function useRadio() {
       node.pause();
       return;
     }
-    if (!station.live && station.url) {
-      setTuning(false);
-      attachDirect(node, station.id, station.url);
-      playNode(node);
+    if (station.url || station.resolve) {
+      setTuning(true);
+      void (async () => {
+        const direct = station.url || (await resolveNews(station.resolve ?? ""));
+        if (mine !== ticket.current) return;
+        if (!direct) {
+          setTuning(false);
+          setFailed(true);
+          setPlaying(false);
+          return;
+        }
+        if (/\.m3u8(\?|$)/i.test(direct)) {
+          try {
+            await attachHls(node, station.id, direct);
+          } catch {
+            if (mine === ticket.current) {
+              setTuning(false);
+              setFailed(true);
+              setPlaying(false);
+            }
+            return;
+          }
+          if (mine !== ticket.current) return;
+          setTuning(false);
+          playNode(node);
+          return;
+        }
+        setTuning(false);
+        attachDirect(node, station.id, direct);
+        playNode(node);
+      })();
       return;
     }
     const url = `/api/radio/live.m3u8?id=${encodeURIComponent(station.id)}`;

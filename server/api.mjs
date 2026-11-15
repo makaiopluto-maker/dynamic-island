@@ -694,10 +694,9 @@ function mapStation(item, progressive = false) {
 const MEDIA_HOSTS = ["gscdn.kbs.co.kr", "imbc.com", "sbs.co.kr", "cbs.co.kr", "ytn.co.kr", "nowcdn.co.kr", "tbs.seoul.kr"];
 
 const FIXED_LIVE = {
-  "939": "https://m-aac.cbs.co.kr/cbs939/_definst_/cbs939.stream/playlist.m3u8",
   "945": "https://radiolive.ytn.co.kr/radio/_definst_/20211118_fmlive/playlist.m3u8",
-  "991": "https://mgugaklive.nowcdn.co.kr/gugakradio/gugakradio.stream/playlist.m3u8",
-  "1013": "https://cdnefm.tbs.seoul.kr/tbs/_definst_/tbs_efm_web_360.smil/playlist.m3u8",
+  "951": "https://cdnfm.tbs.seoul.kr/tbs/_definst_/tbs_fm_web_360.smil/chunklist.m3u8",
+  "981": "https://m-aac.cbs.co.kr/mweb_cbs981/_definst_/cbs981.stream/playlist.m3u8",
 };
 
 function mediaUrl(value) {
@@ -781,8 +780,8 @@ async function readSource(url) {
 
 async function upstreamFor(id) {
   if (FIXED_LIVE[id]) return FIXED_LIVE[id];
-  if (id === "891" || id === "931" || id === "1061") {
-    const code = id === "891" ? "25" : id === "931" ? "24" : "22";
+  if (id === "973" || id === "891" || id === "931" || id === "1061") {
+    const code = id === "973" ? "21" : id === "891" ? "25" : id === "931" ? "24" : "22";
     const text = await readSource(`https://cfpwwwapi.kbs.co.kr/api/v1/landing/live/channel_code/${code}`);
     if (!text) return null;
     const data = JSON.parse(text);
@@ -846,7 +845,15 @@ async function findStations(query, progressive = false) {
     throw error;
   }
   const data = await response.json();
-  return (Array.isArray(data) ? data : []).map((item) => mapStation(item, progressive)).filter(Boolean);
+  return (Array.isArray(data) ? data : []).filter(newsLike).map((item) => mapStation(item, progressive)).filter(Boolean);
+}
+
+function newsLike(item) {
+  const name = String(item?.name ?? "").toLowerCase();
+  const tags = String(item?.tags ?? "").toLowerCase();
+  if (/음악|music fm|k-?pop|classic|cool fm|power fm|happy fm|gugak|fm4u|hip hop|jazz/.test(name)) return false;
+  if (tags.includes("news") || tags.includes("뉴스") || name.includes("news") || name.includes("뉴스")) return true;
+  return /ytn|표준fm|표준 fm|1라디오|1radio|교통방송|love fm|러브fm|러브 fm|한민족|arirang|연합뉴스|kbs 1|mbc 표준|sbs 러브|tbs/.test(name);
 }
 
 function youtubeLimited(request) {

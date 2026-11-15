@@ -1,21 +1,31 @@
 export const dial = [
-  { id: "891", mhz: 89.1, name: "KBS Cool FM", detail: "89.1 Seoul", query: "KBS Cool FM" },
-  { id: "919", mhz: 91.9, name: "MBC FM4U", detail: "91.9 Seoul", query: "MBC FM for you" },
-  { id: "931", mhz: 93.1, name: "KBS Classic FM", detail: "93.1 Seoul", query: "KBS Classic FM" },
-  { id: "939", mhz: 93.9, name: "CBS Music FM", detail: "93.9 Seoul", query: "CBS 음악 FM" },
-  { id: "945", mhz: 94.5, name: "YTN Radio", detail: "94.5 Seoul", query: "YTN 라디오" },
-  { id: "959", mhz: 95.9, name: "MBC FM", detail: "95.9 Seoul", query: "MBC FM" },
-  { id: "991", mhz: 99.1, name: "Gugak FM", detail: "99.1 Seoul", query: "GugakFM" },
-  { id: "1013", mhz: 101.3, name: "TBS eFM", detail: "101.3 Seoul", query: "tbs eFM" },
-  { id: "1035", mhz: 103.5, name: "SBS Love FM", detail: "103.5 Seoul", query: "SBS Love FM" },
-  { id: "1061", mhz: 106.1, name: "KBS Happy FM", detail: "106.1 Seoul", query: "kbs해피fm" },
-  { id: "1077", mhz: 107.7, name: "SBS Power FM", detail: "107.7 Seoul", query: "SBS Power FM" },
+  {
+    id: "945",
+    mhz: 94.5,
+    name: "YTN 라디오",
+    detail: "뉴스",
+    query: "YTN 라디오",
+    url: "https://radiolive.ytn.co.kr/radio/_definst_/20211118_fmlive/playlist.m3u8",
+  },
+  {
+    id: "951",
+    mhz: 95.1,
+    name: "TBS 교통방송",
+    detail: "교통 · 뉴스",
+    query: "TBS FM",
+    url: "https://cdnfm.tbs.seoul.kr/tbs/_definst_/tbs_fm_web_360.smil/chunklist.m3u8",
+  },
+  { id: "959", mhz: 95.9, name: "MBC 표준FM", detail: "뉴스", query: "MBC 표준FM" },
+  { id: "973", mhz: 97.3, name: "KBS 1라디오", detail: "뉴스", query: "KBS 1Radio", resolve: "kbs:21" },
+  {
+    id: "981",
+    mhz: 98.1,
+    name: "CBS 표준FM",
+    detail: "뉴스",
+    query: "CBS 표준FM",
+    url: "https://m-aac.cbs.co.kr/mweb_cbs981/_definst_/cbs981.stream/playlist.m3u8",
+  },
+  { id: "1035", mhz: 103.5, name: "SBS 러브FM", detail: "뉴스", query: "SBS Love FM", resolve: "sbs:lovepc/lovefm" },
 ];
 
-export const channels = [
-  { id: "kpop", name: "Big B K-Pop", detail: "K-Pop", url: "https://antares.dribbcast.com/proxy/kpop?mp=/s" },
-  { id: "moe", name: "Listen.moe", detail: "K-Pop", url: "https://listen.moe/kpop/fallback" },
-  { id: "rey", name: "REYFM K-Pop", detail: "K-Pop", url: "https://listen.reyfm.de/kpop_320kbps.mp3" },
-  { id: "fred", name: "Fred Film", detail: "한국어", url: "https://s10.webradio-hosting.com/proxy/fredradiokr/stream" },
-  { id: "paradise", name: "Radio Paradise", detail: "Eclectic", url: "https://stream.radioparadise.com/mp3-128" },
-];
+export const channels = [];
