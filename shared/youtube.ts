@@ -29,23 +29,35 @@ function clean(value: unknown, fallback: string, max: number) {
   return (text || fallback).slice(0, max);
 }
 
+function songLength(value: unknown) {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) ? seconds : 0;
+}
+
+function isMix(title: string) {
+  return /mix|playlist|compilation|top hits|top songs|hour|노래모음|모음집/i.test(title);
+}
+
 function mapTracks(data: unknown): CatalogTrack[] {
   if (!Array.isArray(data)) return [];
-  const tracks: CatalogTrack[] = [];
+  const songs: CatalogTrack[] = [];
+  const shorter: CatalogTrack[] = [];
   for (const item of data) {
     if (!item || typeof item !== "object") continue;
-    const row = item as { type?: unknown; videoId?: unknown; title?: unknown; author?: unknown };
+    const row = item as { type?: unknown; videoId?: unknown; title?: unknown; author?: unknown; lengthSeconds?: unknown };
     if (row.type !== "video") continue;
     const id = videoId(row.videoId);
     if (!id) continue;
-    tracks.push({
-      id,
-      title: clean(row.title, "YouTube Music", 140),
-      artist: clean(row.author, "YouTube Music", 80),
-    });
-    if (tracks.length >= 8) break;
+    const title = clean(row.title, "YouTube Music", 140);
+    if (isMix(title)) continue;
+    const track = { id, title, artist: clean(row.author, "YouTube Music", 80) };
+    const seconds = songLength(row.lengthSeconds);
+    if (seconds >= 60 && seconds <= 420) songs.push(track);
+    else if (seconds > 0 && seconds < 600) shorter.push(track);
+    if (songs.length >= 12) break;
   }
-  return tracks;
+  const tracks = songs.length >= 4 ? songs : [...songs, ...shorter];
+  return tracks.slice(0, 12);
 }
 
 function hostName(value: unknown) {

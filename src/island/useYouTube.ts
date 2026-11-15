@@ -85,12 +85,7 @@ export function useYouTube(connected: boolean) {
       return;
     }
     player.loadVideoById(id);
-    const frame = player.getIframe?.();
-    if (frame && !frame.src.includes(`/embed/${id}`)) {
-      const origin = encodeURIComponent(window.location.origin);
-      frame.allow = "autoplay; encrypted-media; picture-in-picture";
-      frame.src = `https://www.youtube.com/embed/${id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1&origin=${origin}`;
-    }
+    player.playVideo();
   }, []);
 
   const next = useCallback(() => {
@@ -131,11 +126,15 @@ export function useYouTube(connected: boolean) {
       if (dead || !window.YT?.Player) return;
       const videoId = pendingRef.current ?? tracksRef.current[indexRef.current]?.id;
       player = new window.YT.Player(mount, {
-        width: "100%",
-        height: "100%",
+        width: "256",
+        height: "144",
         videoId: videoId ?? undefined,
         playerVars: {
           autoplay: videoId ? 1 : 0,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          iv_load_policy: 3,
           rel: 0,
           modestbranding: 1,
           playsinline: 1,
@@ -193,7 +192,7 @@ export function useYouTube(connected: boolean) {
 
   useEffect(() => {
     let stop = false;
-    void searchCatalog("popular songs").then((found) => {
+    void searchCatalog("k-pop").then((found) => {
       if (stop || !found.length) return;
       setTracks((current) => (current.length ? current : found));
     });
