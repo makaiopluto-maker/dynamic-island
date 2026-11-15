@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { Cover } from "./Cover.tsx";
 import type { IslandContact, IslandPhoto, LiveState, useWeather } from "./desk.ts";
 import { Dock } from "./Dock.tsx";
@@ -87,6 +87,7 @@ export function Island({
   onDisconnect: () => void;
   onRefresh: () => void;
 }) {
+  const [menu, setMenu] = useState(false);
   const reduce = useReducedMotion() ?? false;
   const spring = reduce
     ? { duration: 0 }
@@ -192,7 +193,32 @@ export function Island({
                   </motion.div>
                 </AnimatePresence>
               ) : null}
-              <StatusBar now={now} onClose={onClose} celsius={weather.current?.celsius ?? null} />
+              <StatusBar
+                now={now}
+                onClose={onClose}
+                menuOpen={menu}
+                onMenu={() => setMenu((open) => !open)}
+                celsius={weather.current?.celsius ?? null}
+              />
+              {menu ? (
+                <div className="more-menu" role="menu" onClick={(event) => event.stopPropagation()}>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); onSource("youtube"); onOpen("music"); }}>
+                    YouTube Music
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); onSource("spotify"); onOpen("music"); }}>
+                    Spotify
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); onOpen("gemini"); }}>
+                    Gemini
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); onOpen("radio"); }}>
+                    Radio
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); onPeek("plus"); }}>
+                    Settings
+                  </button>
+                </div>
+              ) : null}
               <div className="stage">{stage}</div>
               <Dock view={view} peek={peek} dim={dim} onOpen={onOpen} onPeek={onPeek} onMoon={onMoon} />
             </>

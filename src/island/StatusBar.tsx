@@ -1,6 +1,18 @@
 import { seoulFace } from "./format.ts";
 
-export function StatusBar({ now, onClose, celsius }: { now: Date; onClose: () => void; celsius: number | null }) {
+export function StatusBar({
+  now,
+  onClose,
+  menuOpen,
+  onMenu,
+  celsius,
+}: {
+  now: Date;
+  onClose: () => void;
+  menuOpen: boolean;
+  onMenu: () => void;
+  celsius: number | null;
+}) {
   const face = seoulFace(now, celsius);
   return (
     <div className="status">
@@ -12,7 +24,16 @@ export function StatusBar({ now, onClose, celsius }: { now: Date; onClose: () =>
       </button>
       <span className="status-time">
         {face.timeLine}
-        <button type="button" className="more" onClick={onClose} aria-label="Close the island">
+        <button
+          type="button"
+          className={menuOpen ? "more on" : "more"}
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          onClick={(event) => {
+            event.stopPropagation();
+            onMenu();
+          }}
+        >
           ···
         </button>
       </span>
