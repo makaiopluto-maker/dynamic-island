@@ -5,6 +5,8 @@ declare const __ISLAND_VERSION__: string;
 
 const seenKey = "island-seen-version";
 const dismissKey = "island-update-dismissed";
+const installerUrl = "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe";
+const installerBytes = 96_196_825;
 
 type Release = {
   version: string;
@@ -53,11 +55,23 @@ export function ReleaseNotice() {
     const load = async () => {
       try {
         const response = await fetch("/api/release");
+        if (response.ok) {
+          const next = normalize(await response.json());
+          if (!stop && next) {
+            setRelease(next);
+            return;
+          }
+        }
+      } catch {
+        /* The public site has no local API. */
+      }
+      try {
+        const response = await fetch(`${import.meta.env.BASE_URL}release.json`);
         if (!response.ok) return;
         const next = normalize(await response.json());
         if (!stop && next) setRelease(next);
       } catch {
-        /* The page still works without the release feed. */
+        /* The download button still points at the public installer. */
       }
     };
     void load();
@@ -77,13 +91,19 @@ export function ReleaseNotice() {
     if (!seen && built) localStorage.setItem(seenKey, built);
   }, [seen, built]);
 
-  if (!release && !preview) return null;
+  const overlay = new URLSearchParams(window.location.search).get("overlay") === "1";
+  if (!release && !preview && overlay) return null;
 
   const latest = preview ? "0.2.0" : (release?.latest ?? built);
   const ready = preview || compareVersions(latest, built) > 0;
   const updated = !ready && Boolean(seen) && compareVersions(built, seen) > 0;
   const showNotice = (ready && dismissed !== latest) || updated;
-  const downloadHref = release?.desktop ? (ready ? release.downloadUrl : null) : release?.download ? "/download/Dynamic-Island-Setup.exe" : null;
+  const downloadHref = release?.desktop || overlay
+    ? (ready ? release?.downloadUrl ?? null : null)
+    : release?.download
+      ? "/download/Dynamic-Island-Setup.exe"
+      : (release?.downloadUrl ?? installerUrl);
+  const bytes = release?.bytes ?? installerBytes;
   const canReload = ready && !release?.desktop;
   if (!showNotice && !downloadHref) return null;
 
@@ -112,7 +132,7 @@ export function ReleaseNotice() {
       ) : null}
       {downloadHref ? (
         <a className="release-action" href={downloadHref}>
-          {release?.bytes && !release.desktop ? `Windows · ${megabytes(release.bytes)}` : "Download"}
+          {!release?.desktop ? `Windows · ${megabytes(bytes)}` : "Download"}
         </a>
       ) : null}
       {showNotice ? (
