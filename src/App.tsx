@@ -28,7 +28,6 @@ export default function App() {
   const overlay = new URLSearchParams(window.location.search).get("overlay") === "1";
   const [view, setView] = useState<View>(() => (opened === "mail" ? "peek" : "idle"));
   const [peek, setPeek] = useState<PeekId>(() => (opened === "mail" ? "mail" : "plus"));
-  const [deviceHere, setDeviceHere] = useState(true);
   const weather = useWeather();
   const { photos, add: addPhotos } = usePhotos();
   const { contacts, pick: pickContacts } = useContacts();
@@ -39,7 +38,7 @@ export default function App() {
   const compact: Compact = compactFor(radio.playing, musicPlaying, unread, upcoming?.title ?? "");
   const dim = brightness.level != null && brightness.level <= 30;
   const mast = overlay ? 16 : mastHeight(viewport.h);
-  const frame = frameFor(view, compact, viewport.w, viewport.h, mast, peek, live.connected || source === "spotify");
+  const frame = frameFor(view, compact, viewport.w, viewport.h, mast, peek, true);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -94,13 +93,10 @@ export default function App() {
             music.pause();
             youtube.pause();
             spotify.toggle();
-          } else if (live.connected) {
+          } else {
             music.pause();
             spotify.pause();
             youtube.toggle();
-          } else {
-            spotify.pause();
-            music.toggle();
           }
         } else if (view === "radio") {
           event.preventDefault();
@@ -111,7 +107,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view, live.connected, source, music, radio, youtube, spotify]);
+  }, [view, source, music, radio, youtube, spotify]);
 
   useEffect(() => {
     if (!youtube.playing) return;
@@ -132,12 +128,9 @@ export default function App() {
     if (source === "spotify") {
       music.pause();
       youtube.pause();
-    } else if (live.connected) {
+    } else {
       music.pause();
       spotify.pause();
-    } else {
-      spotify.pause();
-      music.play();
     }
     setView("music");
   };
@@ -193,8 +186,6 @@ export default function App() {
           }}
           gemini={gemini}
           brightness={brightness}
-          deviceHere={deviceHere}
-          onToggleDevice={() => setDeviceHere((value) => !value)}
           onOpen={(next) => {
             if (next === "radio") openRadio();
             else setView(next);

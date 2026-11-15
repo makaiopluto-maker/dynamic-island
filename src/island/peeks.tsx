@@ -575,12 +575,18 @@ function SettingsPeek({
       <div className="setting">
         <span>
           <strong>Google</strong>
-          <em>{live.connected ? (live.account ?? "Connected") : "Mail, calendar, photos, and music"}</em>
+          <em>
+            {live.connected
+              ? (live.account ?? "Connected")
+              : live.googleConfigured
+                ? "Mail, calendar, photos, and your library"
+                : "YouTube Music plays from search"}
+          </em>
         </span>
         {!live.ready ? (
           <span className="badge">…</span>
         ) : !live.googleConfigured ? (
-          <span className="badge">Sample</span>
+          <span className="badge">Search</span>
         ) : live.connected ? (
           <span className="setting-actions">
             <a className="text-btn" href="/api/auth/google">
@@ -612,7 +618,7 @@ function SettingsPeek({
         <li>Mail · {live.mail.source === "google" ? "read and send" : "sample"}</li>
         <li>Calendar · {live.calendar.source === "google" ? "today, and new events" : "sample"}</li>
         <li>Photos · {live.connected ? "view and upload" : "this device"}</li>
-        <li>Music · YouTube Music or Spotify</li>
+        <li>Music · YouTube Music search, or Spotify</li>
         <li>Gemini · {geminiReady == null ? "checking" : geminiReady ? "ready" : "not connected on this copy"}</li>
         <li>Radio · Seoul frequencies and channels</li>
         <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>

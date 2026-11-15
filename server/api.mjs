@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getIdentity } from "../cursor/identity.ts";
 import { dial } from "../shared/radio.mjs";
+import { searchCatalog } from "../shared/youtube.ts";
 import { sampleEvents, sampleMail, seoulDay } from "../shared/sample.mjs";
 import { brightnessSupported, readBrightness, writeBrightness } from "./brightness.mjs";
 import { releaseStatus } from "./release.mjs";
@@ -1061,6 +1062,20 @@ export async function handleApi(request) {
     try {
       const stations = (await findStations(q, true)).slice(0, 8);
       return json({ stations });
+    } catch {
+      return json({ error: "unreachable" }, { status: 502 });
+    }
+  }
+
+  if (url.pathname === "/api/youtube/find" && request.method === "GET") {
+    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    if (youtubeLimited(request)) return json({ error: "limited" }, { status: 429 });
+    const q = (url.searchParams.get("q") ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!q) return json({ error: "bad_request" }, { status: 400 });
+    try {
+      const tracks = await searchCatalog(q);
+      if (!tracks.length) return json({ error: "unreachable" }, { status: 502 });
+      return json({ tracks });
     } catch {
       return json({ error: "unreachable" }, { status: 502 });
     }

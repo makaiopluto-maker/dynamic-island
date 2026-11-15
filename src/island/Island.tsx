@@ -37,8 +37,6 @@ export function Island({
   onSource,
   gemini,
   brightness,
-  deviceHere,
-  onToggleDevice,
   onOpen,
   onPeek,
   onMoon,
@@ -71,8 +69,6 @@ export function Island({
   onSource: (source: MusicSource) => void;
   gemini: Gemini;
   brightness: Brightness;
-  deviceHere: boolean;
-  onToggleDevice: () => void;
   onOpen: (view: View) => void;
   onPeek: (id: PeekId) => void;
   onMoon: () => void;
@@ -129,16 +125,7 @@ export function Island({
     );
   } else if (view === "music") {
     stage = (
-      <MusicView
-        music={music}
-        youtube={youtube}
-        spotify={spotify}
-        source={source}
-        onSource={onSource}
-        live={live}
-        deviceHere={deviceHere}
-        onToggleDevice={onToggleDevice}
-      />
+      <MusicView youtube={youtube} spotify={spotify} source={source} onSource={onSource} live={live} />
     );
   } else if (view === "gemini") {
     stage = <GeminiView gemini={gemini} />;
