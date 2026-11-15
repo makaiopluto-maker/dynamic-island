@@ -48,6 +48,7 @@ function startServer(root, port) {
       ELECTRON_RUN_AS_NODE: "1",
       HOST: "127.0.0.1",
       ISLAND_DESKTOP: "1",
+      ISLAND_GEMINI_FILE: join(app.getPath("userData"), "gemini-key"),
       ISLAND_ROOT: root,
       NODE_ENV: "production",
       PORT: String(port),
