@@ -9,7 +9,24 @@ SetCompressorDictSize 64
 Page directory
 Page instfiles
 
+; The island stays running in the tray, and Windows will not replace a running exe.
+Function CloseIsland
+  nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM "Dynamic Island.exe"'
+  Pop $0
+  Sleep 1200
+  IfFileExists "$INSTDIR\Dynamic Island.exe" 0 done
+  ClearErrors
+  Delete "$INSTDIR\Dynamic Island.exe"
+  IfErrors 0 done
+  Sleep 1500
+  nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM "Dynamic Island.exe"'
+  Pop $0
+  Sleep 800
+  done:
+FunctionEnd
+
 Section "Install"
+  Call CloseIsland
   SetOutPath "$INSTDIR"
   File /r "../release/win-unpacked/"
   CreateShortcut "$DESKTOP\Dynamic Island.lnk" "$INSTDIR\Dynamic Island.exe"
@@ -21,6 +38,9 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
+  nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM "Dynamic Island.exe"'
+  Pop $0
+  Sleep 800
   Delete "$DESKTOP\Dynamic Island.lnk"
   Delete "$SMPROGRAMS\Dynamic Island\Dynamic Island.lnk"
   Delete "$SMPROGRAMS\Dynamic Island\Uninstall Dynamic Island.lnk"
