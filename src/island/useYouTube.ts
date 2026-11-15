@@ -192,6 +192,17 @@ export function useYouTube(connected: boolean) {
   }, [playing]);
 
   useEffect(() => {
+    let stop = false;
+    void searchCatalog("popular songs").then((found) => {
+      if (stop || !found.length) return;
+      setTracks((current) => (current.length ? current : found));
+    });
+    return () => {
+      stop = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!connected) return;
     let stop = false;
     void fetch("/api/youtube/library")

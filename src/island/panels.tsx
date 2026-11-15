@@ -22,13 +22,7 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
       }}
     >
       <div className="thread" ref={thread}>
-        {gemini.turns.length === 0 ? (
-          <p className="fine">
-            {gemini.configured === false
-              ? "Gemini isn't connected on this copy yet."
-              : "Ask Gemini. The answer stays in this island."}
-          </p>
-        ) : null}
+        {gemini.turns.length === 0 ? <p className="fine">Ask Gemini. The answer stays in this island.</p> : null}
         {gemini.turns.map((turn, index) => (
           <p key={`${turn.role}-${index}`} className={turn.role === "user" ? "bubble user" : "bubble model"}>
             {turn.text}
@@ -43,9 +37,9 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
           onChange={(event) => gemini.setDraft(event.target.value)}
           placeholder="Ask Gemini"
           aria-label="Message Gemini"
-          disabled={gemini.configured === false || gemini.pending}
+          disabled={gemini.pending}
         />
-        <button type="submit" className="link-btn" disabled={gemini.configured === false || gemini.pending || !gemini.draft.trim()}>
+        <button type="submit" className="link-btn" disabled={gemini.pending || !gemini.draft.trim()}>
           Send
         </button>
       </div>

@@ -198,46 +198,60 @@ function YouTubeMusic({
   }, [attach]);
   const length = Math.max(youtube.duration, 1);
   const progress = (youtube.position / length) * 100;
+  const youtubeLogin = live.googleConfigured ? "/api/auth/google" : "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F";
   return (
     <div className="music-stage yt">
       <SourceSwitch source={source} onSource={onSource} />
-      <div className="yt-layout">
-        <div className="yt-frame" ref={frame} />
-        <div className="yt-side">
-          <p className="music-meta">YouTube Music{youtube.track ? ` · ${youtube.track.artist}` : ""}</p>
-          <p className="lyric">{youtube.track?.title ?? "Search a song"}</p>
-          <form
-            className="yt-search"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void youtube.search();
-            }}
-          >
-            <input
-              value={youtube.query}
-              onChange={(event) => youtube.setQuery(event.target.value)}
-              placeholder="Search songs"
-              aria-label="Search YouTube Music"
-            />
-            <button type="submit" className="link-btn">
-              Search
+      <div className="account-row">
+        <a className="link-btn" href={youtubeLogin} {...(live.googleConfigured ? {} : { target: "_blank", rel: "noreferrer" })}>
+          YouTube 로그인
+        </a>
+        <p className="music-meta">{youtube.track ? `${youtube.track.title} · ${youtube.track.artist}` : "노래를 고르면 여기서 재생됩니다"}</p>
+      </div>
+      <form
+        className="yt-search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void youtube.search();
+        }}
+      >
+        <input
+          value={youtube.query}
+          onChange={(event) => youtube.setQuery(event.target.value)}
+          placeholder="노래 찾기"
+          aria-label="Find a song"
+        />
+        <button type="submit" className="link-btn">
+          찾기
+        </button>
+      </form>
+      {youtube.error === "reconnect" ? (
+        <a className="text-btn" href="/api/auth/google">
+          라이브러리를 보려면 다시 로그인
+        </a>
+      ) : youtube.error === "blocked" ? (
+        <p className="fine">이 곡은 여기서 재생되지 않습니다. 다른 곡을 고르세요.</p>
+      ) : youtube.error === "unreachable" ? (
+        <p className="fine">노래를 찾지 못했습니다. 다시 찾아 보세요.</p>
+      ) : null}
+      <div className="song-list" role="listbox" aria-label="Choose a song">
+        {youtube.tracks.length ? (
+          youtube.tracks.map((track, at) => (
+            <button
+              key={`${track.id}-${at}`}
+              type="button"
+              role="option"
+              aria-selected={at === youtube.index}
+              className={at === youtube.index ? "song on" : "song"}
+              onClick={() => youtube.playAt(at)}
+            >
+              <strong>{track.title}</strong>
+              <span>{track.artist}</span>
             </button>
-          </form>
-          {youtube.error === "reconnect" ? (
-            <a className="text-btn" href="/api/auth/google">
-              Connect again so your library can open
-            </a>
-          ) : youtube.error === "blocked" ? (
-            <p className="fine">This song can't play here. Try the next one.</p>
-          ) : youtube.error === "unreachable" ? (
-            <p className="fine">YouTube Music did not answer. Search again.</p>
-          ) : null}
-          {!live.connected && live.googleConfigured ? (
-            <a className="text-btn" href="/api/auth/google">
-              Connect Google for your library
-            </a>
-          ) : null}
-        </div>
+          ))
+        ) : (
+          <p className="fine">노래 목록을 불러오는 중</p>
+        )}
       </div>
       {youtube.playlists.length ? (
         <div className="yt-row">
@@ -248,22 +262,7 @@ function YouTubeMusic({
           ))}
         </div>
       ) : null}
-      {youtube.tracks.length ? (
-        <div className="yt-row songs">
-          {youtube.tracks.map((track, at) => (
-            <button
-              key={`${track.id}-${at}`}
-              type="button"
-              className={at === youtube.index ? "text-btn on" : "text-btn"}
-              onClick={() => youtube.playAt(at)}
-            >
-              {track.title}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <p className="fine">Search a song, or paste a YouTube Music link.</p>
-      )}
+      <div className="yt-frame" ref={frame} />
       <div className="transport">
         <button type="button" className="orb" onClick={youtube.toggle} aria-label={youtube.playing ? "Pause" : "Play"} aria-pressed={youtube.playing}>
           {youtube.playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
@@ -312,7 +311,12 @@ function SpotifyMusic({
   return (
     <div className="music-stage yt">
       <SourceSwitch source={source} onSource={onSource} />
-      <p className="music-meta">Spotify · {spotify.current.title}</p>
+      <div className="account-row">
+        <a className="link-btn" href="https://accounts.spotify.com/login?continue=https%3A%2F%2Fopen.spotify.com%2F" target="_blank" rel="noreferrer">
+          Spotify 로그인
+        </a>
+        <p className="music-meta">Spotify · {spotify.current.title}</p>
+      </div>
       <iframe className="spotify-frame" title={spotify.current.title} src={spotifyEmbed(spotify.current.uri)} allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" />
       <div className="yt-row">
         {spotify.picks.map((pick) => (
@@ -350,7 +354,7 @@ function SpotifyMusic({
           Open
         </button>
       </form>
-      {note ? <p className="fine">{note}</p> : <p className="fine">Spotify plays with the account in this browser.</p>}
+      {note ? <p className="fine">{note}</p> : <p className="fine">로그인 후 아래 플레이어에서 재생됩니다.</p>}
     </div>
   );
 }

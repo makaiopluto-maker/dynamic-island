@@ -391,7 +391,34 @@ input:focus-visible {
 .more {
   letter-spacing: 0.18em;
   font-weight: 700;
+  border-radius: 999px;
 }
+.more.on { background: rgba(255, 255, 255, 0.16); }
+.more-menu {
+  position: absolute;
+  z-index: 8;
+  top: 36px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(16, 14, 13, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+.more-menu button {
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: white;
+  text-align: left;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+}
+.more-menu button:hover { background: rgba(255, 255, 255, 0.1); }
 
 .eyes, .compact {
   width: 100%;
@@ -658,7 +685,31 @@ input:focus-visible {
   color: white;
 }
 .yt-row { display: flex; gap: 6px; overflow-x: auto; }
-.yt-row.songs { max-height: 76px; flex-wrap: wrap; }
+.account-row { display: flex; align-items: center; gap: 10px; }
+.account-row .music-meta { margin: 0; }
+.song-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+.song {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  text-align: left;
+}
+.song strong { font-size: 13px; font-weight: 650; }
+.song span { font-size: 11px; opacity: 0.72; }
+.song.on { background: rgba(255, 255, 255, 0.22); }
 .text-btn.on { background: rgba(255, 255, 255, 0.22); }
 .music-copy, .transport, .skiprow { position: relative; z-index: 1; }
 .music-copy {
