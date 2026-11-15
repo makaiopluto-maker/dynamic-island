@@ -42,6 +42,7 @@ function islandApi(): Plugin {
 }
 
 export default defineConfig({
+  base: process.env.PAGES_BASE || "/",
   define: {
     __ISLAND_VERSION__: JSON.stringify(islandVersion),
   },

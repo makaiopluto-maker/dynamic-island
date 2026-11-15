@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-개발 서버는 [http://127.0.0.1:4731](http://127.0.0.1:4731) 에서 열립니다.
+개발 서버는 [http://127.0.0.1:4731](http://127.0.0.1:4731) 에서 열립니다. 공개 페이지는 [https://makaiopluto-maker.github.io/dynamic-island/](https://makaiopluto-maker.github.io/dynamic-island/) 입니다. 그 페이지는 화면을 보여주는 정본이고, 서울 FM 중계와 Google 연결, Gemini는 이 컴퓨터에서 서버를 켜거나 설치본을 열어야 합니다.
 
 ## 조작
 
