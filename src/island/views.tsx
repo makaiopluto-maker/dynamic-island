@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Cover } from "./Cover.tsx";
 import { formatElapsed, formatRemaining } from "./format.ts";
-import { AirplayIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
+import { NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
 import type { Compact } from "./types.ts";
 import type { LiveState } from "./desk.ts";
 import type { useMusic } from "./useActivities.ts";
@@ -40,7 +40,7 @@ export function CompactFace({
 }) {
   if (compact === "music") {
     const spotifyOn = source === "spotify" && spotify.playing;
-    const title = spotifyOn ? spotify.current.title : youtube.playing && youtube.track ? youtube.track.title : music.track.title;
+    const title = spotifyOn ? spotify.current.title : youtube.playing && youtube.track ? youtube.track.title : "YouTube Music";
     const position = spotifyOn ? 0 : youtube.playing && youtube.track ? youtube.position : music.position;
     const duration = spotifyOn ? 1 : youtube.playing && youtube.track ? Math.max(youtube.duration, 1) : music.track.duration;
     const progress = Math.min(100, (position / duration) * 100);
@@ -116,9 +116,9 @@ export function HomeView({
   onGemini: () => void;
   onRadio: () => void;
 }) {
-  const title = source === "spotify" ? spotify.current.title : youtube.track?.title ?? music.track.title;
-  const artist = source === "spotify" ? "Spotify" : youtube.track?.artist ?? music.track.artist;
-  const playing = source === "spotify" ? spotify.playing : youtube.track ? youtube.playing : music.playing;
+  const title = source === "spotify" ? spotify.current.title : youtube.track?.title ?? "YouTube Music";
+  const artist = source === "spotify" ? "Spotify" : youtube.track?.artist ?? "Search a song";
+  const playing = source === "spotify" ? spotify.playing : youtube.playing;
   return (
     <div className="cards">
       <button type="button" className="card card-gemini" onClick={onGemini}>
@@ -163,105 +163,32 @@ function SourceSwitch({ source, onSource }: { source: MusicSource; onSource: (so
 }
 
 export function MusicView({
-  music,
   youtube,
   spotify,
   source,
   onSource,
   live,
-  deviceHere,
-  onToggleDevice,
 }: {
-  music: Music;
   youtube: YouTube;
   spotify: Spotify;
   source: MusicSource;
   onSource: (source: MusicSource) => void;
   live: LiveState;
-  deviceHere: boolean;
-  onToggleDevice: () => void;
 }) {
   if (source === "spotify") return <SpotifyMusic spotify={spotify} source={source} onSource={onSource} />;
-  if (live.connected) return <YouTubeMusic youtube={youtube} source={source} onSource={onSource} />;
-  const progress = (music.position / music.track.duration) * 100;
-  return (
-    <div className="music-stage">
-      <SourceSwitch source={source} onSource={onSource} />
-      <div className="music-copy">
-        <p className="music-meta">
-          {music.track.title} · {music.track.artist}
-        </p>
-        <p className="lyric">{music.track.lyrics[0]}</p>
-        <p className="lyric soft">{music.track.lyrics[1]}</p>
-      </div>
-      <div className="transport">
-        <button
-          type="button"
-          className="orb"
-          onClick={music.toggle}
-          aria-label={music.playing ? "Pause" : "Play"}
-          aria-pressed={music.playing}
-        >
-          {music.playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
-        </button>
-        <span className="elapsed">{formatElapsed(music.position)}</span>
-        <input
-          className="scrub"
-          type="range"
-          min={0}
-          max={music.track.duration}
-          step={0.25}
-          value={Math.min(music.position, music.track.duration)}
-          aria-label="Playback position"
-          style={{ ["--p" as string]: `${progress}%` }}
-          onChange={(event) => music.seek(Number(event.target.value))}
-        />
-        <span className="remain">{formatRemaining(music.track.duration - music.position)}</span>
-      </div>
-      <div className="skiprow">
-        <button type="button" className="icon-btn" onClick={music.prev} aria-label="Previous">
-          <PrevIcon />
-        </button>
-        <button
-          type="button"
-          className="icon-btn main"
-          onClick={music.toggle}
-          aria-label={music.playing ? "Pause" : "Play"}
-        >
-          {music.playing ? <PauseIcon size={22} /> : <PlayIcon size={22} />}
-        </button>
-        <button type="button" className="icon-btn" onClick={music.next} aria-label="Next">
-          <NextIcon />
-        </button>
-        <button
-          type="button"
-          className={`icon-btn air${deviceHere ? " on" : ""}`}
-          onClick={onToggleDevice}
-          aria-pressed={deviceHere}
-          aria-label={deviceHere ? "Playing in this window" : "Play in this window"}
-        >
-          <AirplayIcon />
-        </button>
-      </div>
-      {live.googleConfigured ? (
-        <a className="link-btn music-connect" href="/api/auth/google">
-          Play from YouTube Music
-        </a>
-      ) : (
-        <p className="fine music-connect">Sample, until Google is connected.</p>
-      )}
-    </div>
-  );
+  return <YouTubeMusic youtube={youtube} source={source} onSource={onSource} live={live} />;
 }
 
 function YouTubeMusic({
   youtube,
   source,
   onSource,
+  live,
 }: {
   youtube: YouTube;
   source: MusicSource;
   onSource: (source: MusicSource) => void;
+  live: LiveState;
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const { attach } = youtube;
@@ -278,7 +205,7 @@ function YouTubeMusic({
         <div className="yt-frame" ref={frame} />
         <div className="yt-side">
           <p className="music-meta">YouTube Music{youtube.track ? ` · ${youtube.track.artist}` : ""}</p>
-          <p className="lyric">{youtube.track?.title ?? "Your library"}</p>
+          <p className="lyric">{youtube.track?.title ?? "Search a song"}</p>
           <form
             className="yt-search"
             onSubmit={(event) => {
@@ -298,10 +225,17 @@ function YouTubeMusic({
           </form>
           {youtube.error === "reconnect" ? (
             <a className="text-btn" href="/api/auth/google">
-              Connect again so YouTube Music can open
+              Connect again so your library can open
             </a>
+          ) : youtube.error === "blocked" ? (
+            <p className="fine">This song can't play here. Try the next one.</p>
           ) : youtube.error === "unreachable" ? (
-            <p className="fine">YouTube Music did not answer.</p>
+            <p className="fine">YouTube Music did not answer. Search again.</p>
+          ) : null}
+          {!live.connected && live.googleConfigured ? (
+            <a className="text-btn" href="/api/auth/google">
+              Connect Google for your library
+            </a>
           ) : null}
         </div>
       </div>
@@ -328,7 +262,7 @@ function YouTubeMusic({
           ))}
         </div>
       ) : (
-        <p className="fine">Search YouTube Music, or open a playlist.</p>
+        <p className="fine">Search a song, or paste a YouTube Music link.</p>
       )}
       <div className="transport">
         <button type="button" className="orb" onClick={youtube.toggle} aria-label={youtube.playing ? "Pause" : "Play"} aria-pressed={youtube.playing}>

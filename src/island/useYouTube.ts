@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { searchCatalog, videoFromLink } from "../../shared/youtube.ts";
 
 export type YtTrack = { id: string; title: string; artist: string };
 export type YtPlaylist = { id: string; title: string; count: number };
@@ -11,6 +12,7 @@ type YtPlayer = {
   getCurrentTime: () => number;
   getDuration: () => number;
   getPlayerState: () => number;
+  getIframe?: () => HTMLIFrameElement;
   destroy: () => void;
 };
 
@@ -19,10 +21,12 @@ type PlayerCtor = new (
   options: {
     width: string;
     height: string;
+    videoId?: string;
     playerVars: Record<string, string | number>;
     events: {
       onReady: () => void;
       onStateChange: (event: { data: number }) => void;
+      onError: () => void;
     };
   },
 ) => YtPlayer;
@@ -62,7 +66,7 @@ export function useYouTube(connected: boolean) {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [query, setQuery] = useState("");
-  const [error, setError] = useState<"reconnect" | "unreachable" | null>(null);
+  const [error, setError] = useState<"reconnect" | "unreachable" | "blocked" | null>(null);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const playerRef = useRef<YtPlayer | null>(null);
   const tracksRef = useRef(tracks);
@@ -76,8 +80,17 @@ export function useYouTube(connected: boolean) {
 
   const playId = useCallback((id: string) => {
     const player = playerRef.current;
-    if (player) player.loadVideoById(id);
-    else pendingRef.current = id;
+    if (!player) {
+      pendingRef.current = id;
+      return;
+    }
+    player.loadVideoById(id);
+    const frame = player.getIframe?.();
+    if (frame && !frame.src.includes(`/embed/${id}`)) {
+      const origin = encodeURIComponent(window.location.origin);
+      frame.allow = "autoplay; encrypted-media; picture-in-picture";
+      frame.src = `https://www.youtube.com/embed/${id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1&origin=${origin}`;
+    }
   }, []);
 
   const next = useCallback(() => {
@@ -109,17 +122,20 @@ export function useYouTube(connected: boolean) {
   }, [playId]);
 
   useEffect(() => {
-    if (!connected || !host) return;
+    if (!host) return;
     let dead = false;
     let player: YtPlayer | null = null;
     const mount = document.createElement("div");
     host.appendChild(mount);
     void loadPlayerApi().then(() => {
       if (dead || !window.YT?.Player) return;
+      const videoId = pendingRef.current ?? tracksRef.current[indexRef.current]?.id;
       player = new window.YT.Player(mount, {
         width: "100%",
         height: "100%",
+        videoId: videoId ?? undefined,
         playerVars: {
+          autoplay: videoId ? 1 : 0,
           rel: 0,
           modestbranding: 1,
           playsinline: 1,
@@ -133,6 +149,12 @@ export function useYouTube(connected: boolean) {
             if (queued) {
               pendingRef.current = null;
               player?.loadVideoById(queued);
+            }
+          },
+          onError: () => {
+            if (!dead) {
+              setPlaying(false);
+              setError("blocked");
             }
           },
           onStateChange: (event) => {
@@ -155,7 +177,7 @@ export function useYouTube(connected: boolean) {
         mount.remove();
       }
     };
-  }, [connected, host, next]);
+  }, [host, next]);
 
   useEffect(() => {
     if (!playing) return;
@@ -244,25 +266,47 @@ export function useYouTube(connected: boolean) {
     [playId],
   );
 
+  const showTracks = useCallback(
+    (list: YtTrack[]) => {
+      tracksRef.current = list;
+      indexRef.current = 0;
+      setTracks(list);
+      setIndex(0);
+      setPosition(0);
+      setDuration(0);
+      const id = list[0]?.id;
+      if (id) playId(id);
+    },
+    [playId],
+  );
+
   const search = useCallback(async () => {
     const q = query.trim();
     if (!q) return;
     setError(null);
+    const linked = videoFromLink(q);
+    if (linked) {
+      showTracks([{ id: linked, title: "YouTube Music", artist: "Link" }]);
+      return;
+    }
     try {
-      const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(q)}`);
-      const body = (await response.json()) as { tracks?: YtTrack[]; error?: string };
-      if (body.error === "reconnect") setError("reconnect");
-      else if (body.error) setError("unreachable");
-      else {
-        setTracks(body.tracks ?? []);
-        setIndex(0);
-        setPosition(0);
-        setDuration(0);
+      if (connected) {
+        const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(q)}`);
+        if (response.ok) {
+          const body = (await response.json()) as { tracks?: YtTrack[] };
+          if (body.tracks?.length) {
+            showTracks(body.tracks);
+            return;
+          }
+        }
       }
+      const found = await searchCatalog(q);
+      if (!found.length) setError("unreachable");
+      else showTracks(found);
     } catch {
       setError("unreachable");
     }
-  }, [query]);
+  }, [connected, query, showTracks]);
 
   const openPlaylist = useCallback(async (id: string) => {
     setError(null);
