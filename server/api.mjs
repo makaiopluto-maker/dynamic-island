@@ -3,6 +3,7 @@ import { getIdentity } from "../cursor/identity.ts";
 import { dial } from "../shared/radio.mjs";
 import { sampleEvents, sampleMail, seoulDay } from "../shared/sample.mjs";
 import { brightnessSupported, readBrightness, writeBrightness } from "./brightness.mjs";
+import { releaseStatus } from "./release.mjs";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -62,10 +63,10 @@ function secureRequest(request) {
   return new URL(request.url).protocol === "https:";
 }
 
-function json(body, { status = 200, cookies = [] } = {}) {
+function json(body, { status = 200, cookies = [], cache = "private, no-store" } = {}) {
   const headers = new Headers({
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "private, no-store",
+    "cache-control": cache,
   });
   for (const cookie of cookies) headers.append("set-cookie", cookie);
   return new Response(JSON.stringify(body), { status, headers });
@@ -977,6 +978,9 @@ function cleanMessages(body) {
 export async function handleApi(request) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/")) return null;
+  if (url.pathname === "/api/release" && request.method === "GET") {
+    return json(await releaseStatus(), { cache: "no-store" });
+  }
   const viewer = await requirePerson(request);
   if (viewer instanceof Response) return viewer;
   const now = new Date();

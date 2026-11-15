@@ -10,6 +10,7 @@ import { useGemini } from "./island/useGemini.ts";
 import { useRadio } from "./island/useRadio.ts";
 import { useMusicSource, useSpotify } from "./island/useSpotify.ts";
 import { useYouTube } from "./island/useYouTube.ts";
+import { ReleaseNotice } from "./island/ReleaseNotice.tsx";
 import { Room } from "./scene/Room.tsx";
 
 export default function App() {
@@ -193,6 +194,7 @@ export default function App() {
         />
       </div>
       <p className="keys">Esc closes · 1 Home · 2 Music · 3 Gemini · 4 Radio</p>
+      <ReleaseNotice />
       <p className="sr-only" aria-live="polite">
         {view === "idle" ? "Dynamic Island closed" : `Dynamic Island showing ${view}`}
       </p>

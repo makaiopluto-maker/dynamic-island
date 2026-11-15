@@ -4,6 +4,7 @@ OutFile "../release/Dynamic-Island-Setup.exe"
 InstallDir "$LOCALAPPDATA\Dynamic Island"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
+SetCompressorDictSize 64
 
 Page directory
 Page instfiles
