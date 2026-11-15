@@ -64,14 +64,14 @@ export function RadioView({ radio }: { radio: Radio }) {
       const body = (await response.json()) as { stations?: Station[]; error?: string };
       if (!response.ok || body.error) {
         setFound([]);
-        setNote(response.status === 429 ? "Too many lookups. Wait a minute." : "No station matched.");
+        setNote(response.status === 429 ? "Too many lookups. Wait a minute." : "뉴스 채널이 없습니다.");
         return;
       }
       setFound(body.stations ?? []);
-      if (!body.stations?.length) setNote("No station matched.");
+      if (!body.stations?.length) setNote("뉴스 채널이 없습니다.");
     } catch {
       setFound([]);
-      setNote("No station matched.");
+      setNote("뉴스 채널이 없습니다.");
     }
   };
 
@@ -144,8 +144,8 @@ export function RadioView({ radio }: { radio: Radio }) {
         }}
       >
         <label className="field">
-          Find a station
-          <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Find a station" />
+          뉴스 찾기
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="YTN, KBS, BBC" aria-label="Find a news station" />
         </label>
         <button type="submit" className="link-btn">
           Search

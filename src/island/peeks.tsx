@@ -620,7 +620,7 @@ function SettingsPeek({
         <li>Photos · {live.connected ? "view and upload" : "this device"}</li>
         <li>Music · YouTube Music search, or Spotify</li>
         <li>Gemini · {geminiReady == null ? "checking" : geminiReady ? "ready" : "not connected on this copy"}</li>
-        <li>Radio · Seoul frequencies and channels</li>
+        <li>Radio · news stations</li>
         <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
         <li>Lights · {brightnessSupported ? "this monitor" : "the Windows app on this PC"}</li>
       </ul>
