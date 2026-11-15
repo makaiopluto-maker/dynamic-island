@@ -2,6 +2,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { handleApi, toWebRequest, writeNodeResponse } from "./api.mjs";
+import { serveInstaller } from "./download.mjs";
 
 const port = Number(process.env.PORT) || 4731;
 const host = process.env.HOST || "0.0.0.0";
@@ -28,6 +29,7 @@ function fileFor(pathname) {
 
 const server = createServer(async (req, res) => {
   try {
+    if (serveInstaller(req, res)) return;
     const request = await toWebRequest(req);
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {

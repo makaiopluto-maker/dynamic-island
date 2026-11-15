@@ -4,6 +4,7 @@ OutFile "../release/Dynamic-Island-Setup.exe"
 InstallDir "$LOCALAPPDATA\Dynamic Island"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
+SetCompressorDictSize 64
 
 Page directory
 Page instfiles
@@ -16,6 +17,7 @@ Section "Install"
   CreateShortcut "$SMPROGRAMS\Dynamic Island\Dynamic Island.lnk" "$INSTDIR\Dynamic Island.exe"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortcut "$SMPROGRAMS\Dynamic Island\Uninstall Dynamic Island.lnk" "$INSTDIR\Uninstall.exe"
+  Exec '"$INSTDIR\Dynamic Island.exe"'
 SectionEnd
 
 Section "Uninstall"

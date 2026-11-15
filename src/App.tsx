@@ -10,6 +10,7 @@ import { useGemini } from "./island/useGemini.ts";
 import { useRadio } from "./island/useRadio.ts";
 import { useMusicSource, useSpotify } from "./island/useSpotify.ts";
 import { useYouTube } from "./island/useYouTube.ts";
+import { ReleaseNotice } from "./island/ReleaseNotice.tsx";
 import { Room } from "./scene/Room.tsx";
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
   const gemini = useGemini();
   const brightness = useBrightness();
   const [opened] = useState(() => new URLSearchParams(window.location.search).get("open"));
+  const overlay = new URLSearchParams(window.location.search).get("overlay") === "1";
   const [view, setView] = useState<View>(() => (opened === "mail" ? "peek" : "idle"));
   const [peek, setPeek] = useState<PeekId>(() => (opened === "mail" ? "mail" : "plus"));
   const [deviceHere, setDeviceHere] = useState(true);
@@ -36,14 +38,39 @@ export default function App() {
   const musicPlaying = source === "spotify" ? spotify.playing : youtube.playing || music.playing;
   const compact: Compact = compactFor(radio.playing, musicPlaying, unread, upcoming?.title ?? "");
   const dim = brightness.level != null && brightness.level <= 30;
-  const mast = mastHeight(viewport.h);
+  const mast = overlay ? 16 : mastHeight(viewport.h);
   const frame = frameFor(view, compact, viewport.w, viewport.h, mast, peek, live.connected || source === "spotify");
 
   useEffect(() => {
-    if (opened || new URLSearchParams(window.location.search).has("google")) {
-      window.history.replaceState({}, "", "/");
-    }
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("open") && !params.has("google")) return;
+    params.delete("open");
+    params.delete("google");
+    const next = params.toString();
+    window.history.replaceState({}, "", next ? `/?${next}` : "/");
   }, [opened]);
+
+  useEffect(() => {
+    if (!overlay) return;
+    const api = window.islandDesktop;
+    if (!api) return;
+    let interactive = false;
+    const update = (event: MouseEvent) => {
+      const next = overIsland(event.clientX, event.clientY);
+      if (next === interactive) return;
+      interactive = next;
+      api.setInteractive(next);
+    };
+    window.addEventListener("mousemove", update);
+    return () => window.removeEventListener("mousemove", update);
+  }, [overlay]);
+
+  useEffect(() => {
+    if (!overlay) return;
+    const onBlur = () => setView("idle");
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [overlay]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -125,21 +152,25 @@ export default function App() {
 
   return (
     <div
-      className={dim ? "screen dim" : "screen"}
+      className={overlay ? (dim ? "screen overlay dim" : "screen overlay") : dim ? "screen dim" : "screen"}
       style={{ "--mast": `${mast}px` } as CSSProperties}
       onClick={() => setView("idle")}
     >
-      <header className="mast">
-        <h1>
-          <span>Dynamic Island</span>
-          <span className="for">for Windows</span>
-        </h1>
-      </header>
-      <div className="room">
-        <Room />
-        <div className="room-shade" />
-      </div>
-      {view === "idle" ? <p className="hint">Click the island</p> : null}
+      {overlay ? null : (
+        <header className="mast">
+          <h1>
+            <span>Dynamic Island</span>
+            <span className="for">for Windows</span>
+          </h1>
+        </header>
+      )}
+      {overlay ? null : (
+        <div className="room">
+          <Room />
+          <div className="room-shade" />
+        </div>
+      )}
+      {view === "idle" && !overlay ? <p className="hint">Click the island</p> : null}
       <div className="island-slot">
         <Island
           view={view}
@@ -192,12 +223,29 @@ export default function App() {
           onRefresh={() => void reload()}
         />
       </div>
-      <p className="keys">Esc closes · 1 Home · 2 Music · 3 Gemini · 4 Radio</p>
+      {overlay ? null : <p className="keys">Esc closes · 1 Home · 2 Music · 3 Gemini · 4 Radio</p>}
+      {overlay ? null : <ReleaseNotice />}
       <p className="sr-only" aria-live="polite">
         {view === "idle" ? "Dynamic Island closed" : `Dynamic Island showing ${view}`}
       </p>
     </div>
   );
+}
+
+declare global {
+  interface Window {
+    islandDesktop?: {
+      setInteractive: (interactive: boolean) => void;
+    };
+  }
+}
+
+function overIsland(x: number, y: number) {
+  for (const node of document.querySelectorAll(".island")) {
+    const rect = node.getBoundingClientRect();
+    if (x >= rect.left - 16 && x <= rect.right + 16 && y >= rect.top - 12 && y <= rect.bottom + 16) return true;
+  }
+  return false;
 }
 
 function compactFor(radioOn: boolean, musicPlaying: boolean, unread: number, eventTitle: string): Compact {
