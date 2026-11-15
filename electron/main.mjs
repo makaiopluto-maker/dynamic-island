@@ -1,20 +1,32 @@
-import { app, BrowserWindow, dialog, Notification } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, screen, Tray } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { compareVersions, releaseFeed } from "../shared/release.mjs";
 
-const port = process.env.PORT || "4731";
 const devUrl = process.env.ELECTRON_START_URL;
 let child = null;
+let tray = null;
+let overlay = null;
+let quitting = false;
 
 function appRoot() {
   if (app.isPackaged) return join(process.resourcesPath, "app");
   return join(import.meta.dirname, "..");
 }
 
-async function waitForServer() {
+function freePort(start) {
+  return new Promise((resolve) => {
+    const tester = createServer();
+    tester.once("error", () => resolve(freePort(start + 1)));
+    tester.once("listening", () => tester.close(() => resolve(start)));
+    tester.listen(start, "127.0.0.1");
+  });
+}
+
+async function waitForServer(port) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/`);
@@ -27,7 +39,8 @@ async function waitForServer() {
   throw new Error("The island server did not start.");
 }
 
-function startServer(root) {
+function startServer(root, port) {
+  let log = "";
   child = spawn(process.execPath, ["--experimental-strip-types", join(root, "server", "index.mjs")], {
     cwd: root,
     env: {
@@ -37,13 +50,21 @@ function startServer(root) {
       ISLAND_DESKTOP: "1",
       ISLAND_ROOT: root,
       NODE_ENV: "production",
-      PORT: port,
+      PORT: String(port),
     },
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
   });
+  const keep = (chunk) => {
+    log = `${log}${chunk}`.slice(-2000);
+  };
+  child.stdout?.on("data", keep);
+  child.stderr?.on("data", keep);
   child.on("exit", (code) => {
     child = null;
-    if (code && code !== 0) app.quit();
+    if (!quitting && code && code !== 0) {
+      dialog.showErrorBox("Dynamic Island", log.trim() || "The island server stopped.");
+      app.quit();
+    }
   });
 }
 
@@ -77,7 +98,6 @@ async function watchUpdates(window) {
     note.on("click", () => {
       if (window.isDestroyed()) return;
       window.show();
-      window.focus();
     });
     note.show();
     mkdirSync(stampDir, { recursive: true });
@@ -87,37 +107,118 @@ async function watchUpdates(window) {
   }
 }
 
-function createWindow() {
+function place(window) {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const area = display.workArea;
+  const height = Math.min(780, Math.max(520, Math.round(area.height * 0.72)));
+  window.setBounds({ x: area.x, y: area.y, width: area.width, height });
+}
+
+function showOverlay() {
+  if (!overlay || overlay.isDestroyed()) return;
+  place(overlay);
+  overlay.show();
+  overlay.setAlwaysOnTop(true, "screen-saver");
+}
+
+function createWindow(port) {
   const window = new BrowserWindow({
-    width: 1280,
-    height: 840,
-    minWidth: 960,
-    minHeight: 640,
-    backgroundColor: "#1a120c",
-    autoHideMenuBar: true,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    hasShadow: false,
+    thickFrame: false,
     title: "Dynamic Island",
-    webPreferences: { contextIsolation: true },
+    webPreferences: {
+      preload: join(import.meta.dirname, "preload.cjs"),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
   });
-  void window.loadURL(devUrl || `http://127.0.0.1:${port}/`);
+  place(window);
+  window.setAlwaysOnTop(true, "screen-saver");
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  window.setIgnoreMouseEvents(true, { forward: true });
+  const target = new URL(devUrl || `http://127.0.0.1:${port}/`);
+  target.searchParams.set("overlay", "1");
+  void window.loadURL(target.toString());
+  window.once("ready-to-show", () => showOverlay());
+  window.on("close", (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    window.hide();
+  });
   return window;
 }
 
-app.whenReady().then(async () => {
-  try {
-    if (!devUrl) {
-      startServer(appRoot());
-      await waitForServer();
-    }
-    const window = createWindow();
-    void watchUpdates(window);
-  } catch (error) {
-    dialog.showErrorBox("Dynamic Island", error instanceof Error ? error.message : "The island did not open.");
-    app.quit();
-  }
+function createTray() {
+  const image = nativeImage.createFromPath(join(import.meta.dirname, "tray.png"));
+  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
+  tray.setToolTip("Dynamic Island");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Show", click: () => showOverlay() },
+      { type: "separator" },
+      {
+        label: "Quit",
+        click: () => {
+          quitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+  tray.on("click", () => showOverlay());
+}
+
+ipcMain.on("island:interactive", (event, interactive) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window) return;
+  if (interactive) window.setIgnoreMouseEvents(false);
+  else window.setIgnoreMouseEvents(true, { forward: true });
 });
 
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => showOverlay());
+  app.whenReady().then(async () => {
+    try {
+      if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true });
+      const port = devUrl ? Number(process.env.PORT) || 4731 : await freePort(4731);
+      if (!devUrl) {
+        startServer(appRoot(), port);
+        await waitForServer(port);
+      }
+      overlay = createWindow(port);
+      createTray();
+      screen.on("display-metrics-changed", () => {
+        if (overlay && !overlay.isDestroyed()) place(overlay);
+      });
+      void watchUpdates(overlay);
+    } catch (error) {
+      dialog.showErrorBox("Dynamic Island", error instanceof Error ? error.message : "The island did not open.");
+      quitting = true;
+      app.quit();
+    }
+  });
+}
+
 app.on("before-quit", () => {
+  quitting = true;
   child?.kill();
 });
 
-app.on("window-all-closed", () => app.quit());
+app.on("window-all-closed", () => {
+  if (quitting) app.quit();
+});

@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
-  "notes": "Includes the Windows installer.",
+  "version": "0.3.0",
+  "notes": "The island stays on top of the desktop.",
   "download": ""
 }

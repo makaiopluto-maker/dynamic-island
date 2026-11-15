@@ -14,6 +14,13 @@ html, body, #root {
   background: #000;
 }
 
+html.overlay,
+html.overlay body,
+html.overlay #root,
+html.overlay .screen {
+  background: transparent;
+}
+
 body {
   overflow: hidden;
 }
@@ -198,6 +205,14 @@ input:focus-visible {
   color: rgba(255, 255, 255, 0.78);
   font-size: 18px;
   line-height: 1;
+}
+
+.screen.overlay {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.screen.overlay .island-slot {
+  top: 8px;
 }
 
 .island-slot {

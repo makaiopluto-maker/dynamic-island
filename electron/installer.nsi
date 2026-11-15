@@ -17,6 +17,7 @@ Section "Install"
   CreateShortcut "$SMPROGRAMS\Dynamic Island\Dynamic Island.lnk" "$INSTDIR\Dynamic Island.exe"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortcut "$SMPROGRAMS\Dynamic Island\Uninstall Dynamic Island.lnk" "$INSTDIR\Uninstall.exe"
+  Exec '"$INSTDIR\Dynamic Island.exe"'
 SectionEnd
 
 Section "Uninstall"
