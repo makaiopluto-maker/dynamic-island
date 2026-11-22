@@ -38,7 +38,7 @@ export function GeminiView({ gemini }: { gemini: LocalAi }) {
         {!loading && gemini.turns.length === 0 ? (
           <p className="fine">
             {needsKey
-              ? "Google AI Studio 키를 한 번 저장하면 바로 채팅할 수 있습니다. PC를 멈추지 않습니다."
+              ? "Gemini는 Google AI API 키가 필요합니다. aistudio.google.com 에서 키를 받아 한 번만 저장하세요. PC에서 모델을 돌리지 않아 멈추지 않습니다."
               : "무엇이든 물어보세요."}
           </p>
         ) : null}
@@ -57,36 +57,41 @@ export function GeminiView({ gemini }: { gemini: LocalAi }) {
           </button>
         </div>
       ) : needsKey ? (
-        <div className="ask">
-          <input
-            value={key}
-            onChange={(event) => setKey(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-              event.preventDefault();
-              void gemini.saveKey(key).then((saved) => {
-                if (saved) setKey("");
-              });
-            }}
-            placeholder="AIza… Google AI 키"
-            aria-label="Google AI key"
-            type="password"
-            autoComplete="off"
-            disabled={gemini.pending}
-          />
-          <button
-            type="button"
-            className="link-btn"
-            disabled={gemini.pending || !key.trim()}
-            onClick={() => {
-              void gemini.saveKey(key).then((saved) => {
-                if (saved) setKey("");
-              });
-            }}
-          >
-            저장
-          </button>
-        </div>
+        <>
+          <a className="text-btn" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">
+            API 키 발급
+          </a>
+          <div className="ask">
+            <input
+              value={key}
+              onChange={(event) => setKey(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                event.preventDefault();
+                void gemini.saveKey(key).then((saved) => {
+                  if (saved) setKey("");
+                });
+              }}
+              placeholder="AIza… Google AI 키"
+              aria-label="Google AI key"
+              type="password"
+              autoComplete="off"
+              disabled={gemini.pending}
+            />
+            <button
+              type="button"
+              className="link-btn"
+              disabled={gemini.pending || !key.trim()}
+              onClick={() => {
+                void gemini.saveKey(key).then((saved) => {
+                  if (saved) setKey("");
+                });
+              }}
+            >
+              저장
+            </button>
+          </div>
+        </>
       ) : (
         <div className="ask">
           <input

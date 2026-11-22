@@ -232,6 +232,18 @@ function YouTubeMusic({
         />
         <span className="remain">{formatRemaining(Math.max(0, youtube.duration - youtube.position))}</span>
       </div>
+      <label className="dial volume music-volume">
+        <strong>{Math.round(youtube.volume * 100)}%</strong>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={youtube.volume}
+          aria-label="Volume"
+          onChange={(event) => youtube.setVolume(Number(event.target.value))}
+        />
+      </label>
       {youtube.error === "reconnect" && live.googleConfigured ? (
         <a className="text-btn" href="/api/auth/google">
           라이브러리를 보려면 다시 연결

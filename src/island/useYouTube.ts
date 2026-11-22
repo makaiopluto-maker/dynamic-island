@@ -9,12 +9,22 @@ type YtPlayer = {
   playVideo: () => void;
   pauseVideo: () => void;
   seekTo: (seconds: number, allowSeekAhead: boolean) => void;
+  setVolume: (volume: number) => void;
+  getVolume: () => number;
   getCurrentTime: () => number;
   getDuration: () => number;
   getPlayerState: () => number;
   getIframe?: () => HTMLIFrameElement;
   destroy: () => void;
 };
+
+const VOLUME_KEY = "island-youtube-volume";
+
+function loadVolume() {
+  const raw = Number(localStorage.getItem(VOLUME_KEY));
+  if (!Number.isFinite(raw)) return 0.85;
+  return Math.min(1, Math.max(0, raw));
+}
 
 type PlayerCtor = new (
   element: HTMLElement,
@@ -67,13 +77,19 @@ export function useYouTube(connected: boolean) {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [query, setQuery] = useState("");
+  const [volume, setVolumeState] = useState(loadVolume);
   const [error, setError] = useState<"reconnect" | "unreachable" | "blocked" | null>(null);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const playerRef = useRef<YtPlayer | null>(null);
+  const volumeRef = useRef(volume);
   const tracksRef = useRef(tracks);
   const indexRef = useRef(index);
   const pendingRef = useRef<string | null>(null);
   const nextRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
 
   useEffect(() => {
     tracksRef.current = tracks;
@@ -164,6 +180,11 @@ export function useYouTube(connected: boolean) {
           onReady: () => {
             if (dead) return;
             playerRef.current = player;
+            try {
+              player?.setVolume(Math.round(volumeRef.current * 100));
+            } catch {
+              /* Volume applies on the next play if the API is late. */
+            }
             const frame = player?.getIframe?.();
             if (frame) {
               frame.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture");
@@ -307,6 +328,18 @@ export function useYouTube(connected: boolean) {
     setPosition(value);
   }, []);
 
+  const setVolume = useCallback((value: number) => {
+    const next = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+    volumeRef.current = next;
+    setVolumeState(next);
+    localStorage.setItem(VOLUME_KEY, String(next));
+    try {
+      playerRef.current?.setVolume(Math.round(next * 100));
+    } catch {
+      /* Player may not be ready yet. */
+    }
+  }, []);
+
   const playAt = useCallback(
     (at: number) => {
       const track = tracksRef.current[at];
@@ -397,6 +430,8 @@ export function useYouTube(connected: boolean) {
     duration,
     query,
     setQuery,
+    volume,
+    setVolume,
     error,
     toggle,
     pause,
