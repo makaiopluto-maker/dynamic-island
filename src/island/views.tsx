@@ -122,7 +122,7 @@ export function HomeView({
   return (
     <div className="cards">
       <button type="button" className="card card-gemini" onClick={onGemini}>
-        <span className="kicker">OpenClaw</span>
+        <span className="kicker">AI</span>
         <span>
           <span className="card-time">Ask</span>
           <span className="card-sub">{geminiLine}</span>

@@ -8,6 +8,8 @@ import { compareVersions, releaseFeed } from "../shared/release.mjs";
 
 const devUrl = process.env.ELECTRON_START_URL;
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+app.commandLine.appendSwitch("enable-features", "WebGPU,Vulkan");
+app.commandLine.appendSwitch("enable-unsafe-webgpu");
 let child = null;
 let tray = null;
 let overlay = null;

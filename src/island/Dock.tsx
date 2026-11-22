@@ -22,7 +22,7 @@ type DockItem = {
 const items: DockItem[] = [
   { id: "plus-left", label: "Settings", icon: "plus" },
   { id: "home", label: "Home", icon: "home" },
-  { id: "gemini", label: "OpenClaw", icon: "gemini" },
+  { id: "gemini", label: "AI", icon: "gemini" },
   { id: "music", label: "Music", icon: "music" },
   { id: "radio", label: "Radio", icon: "radio" },
   { id: "weather", label: "Weather", icon: "weather" },

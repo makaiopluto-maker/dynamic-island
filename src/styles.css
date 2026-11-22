@@ -1314,6 +1314,25 @@ iframe.spotify-frame {
   flex-direction: column;
   gap: 8px;
 }
+.ai-load {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px;
+}
+.ai-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.ai-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.75);
+  transition: width 0.25s ease;
+}
 .bubble {
   max-width: 92%;
   margin: 0;

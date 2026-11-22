@@ -6,7 +6,7 @@ import { mastHeight } from "./island/format.ts";
 import type { Compact, PeekId, View } from "./island/types.ts";
 import { useMusic, useNow, useViewport } from "./island/useActivities.ts";
 import { useBrightness } from "./island/useBrightness.ts";
-import { useOpenClaw } from "./island/useOpenClaw.ts";
+import { useLocalAi } from "./island/useLocalAi.ts";
 import { useRadio } from "./island/useRadio.ts";
 import { useMusicSource, useSpotify } from "./island/useSpotify.ts";
 import { useYouTube } from "./island/useYouTube.ts";
@@ -22,12 +22,13 @@ export default function App() {
   const youtube = useYouTube(live.connected);
   const spotify = useSpotify();
   const { source, setSource } = useMusicSource();
-  const gemini = useOpenClaw();
   const brightness = useBrightness();
   const [opened] = useState(() => new URLSearchParams(window.location.search).get("open"));
   const overlay = new URLSearchParams(window.location.search).get("overlay") === "1";
   const [view, setView] = useState<View>(() => (opened === "mail" ? "peek" : "idle"));
   const [peek, setPeek] = useState<PeekId>(() => (opened === "mail" ? "mail" : "plus"));
+  const [aiNeeded, setAiNeeded] = useState(false);
+  const gemini = useLocalAi(aiNeeded);
   const weather = useWeather();
   const { photos, add: addPhotos } = usePhotos();
   const { contacts, pick: pickContacts } = useContacts();
@@ -70,6 +71,10 @@ export default function App() {
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
   }, [overlay]);
+
+  useEffect(() => {
+    if (view === "gemini" || view === "home") setAiNeeded(true);
+  }, [view]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -214,7 +219,7 @@ export default function App() {
           onRefresh={() => void reload()}
         />
       </div>
-      {overlay ? null : <p className="keys">Esc closes · 1 Home · 2 Music · 3 OpenClaw · 4 Radio</p>}
+      {overlay ? null : <p className="keys">Esc closes · 1 Home · 2 Music · 3 AI · 4 Radio</p>}
       {overlay ? null : <ReleaseNotice />}
       <p className="sr-only" aria-live="polite">
         {view === "idle" ? "Dynamic Island closed" : `Dynamic Island showing ${view}`}

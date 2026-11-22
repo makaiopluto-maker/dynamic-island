@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
-  "notes": "OpenClaw Gateway chat, news radio volume, and built-in YouTube Music.",
+  "version": "1.2.0",
+  "notes": "Built-in local AI with no API key or OpenClaw setup.",
   "download": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe",
-  "bytes": 96242567
+  "bytes": 97446074
 }
