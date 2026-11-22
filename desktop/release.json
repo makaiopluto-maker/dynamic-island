@@ -2,5 +2,5 @@
   "version": "1.5.1",
   "notes": "Google login baked into the installer — no Settings Client ID/Secret step after install.",
   "download": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe",
-  "bytes": 0
+  "bytes": 96267686
 }
