@@ -12,7 +12,7 @@ function GoogleRow({
   onDisconnect: () => void;
 }) {
   if (!live.ready) return <p className="fine">Checking the account…</p>;
-  if (!live.googleConfigured) return <p className="fine">Sample, until Google is connected.</p>;
+  if (!live.googleConfigured) return <p className="fine">Google을 연결하면 메일과 일정이 여기에 옵니다.</p>;
   if (!live.connected) {
     return (
       <a className="link-btn" href="/api/auth/google">
@@ -31,7 +31,7 @@ function GoogleRow({
 }
 
 function Badge({ source }: { source: "google" | "sample" }) {
-  return <span className={source === "google" ? "badge live" : "badge"}>{source === "google" ? "Google" : "Sample"}</span>;
+  return <span className={source === "google" ? "badge live" : "badge"}>{source === "google" ? "Google" : "연결 필요"}</span>;
 }
 
 function MailList({
@@ -45,8 +45,8 @@ function MailList({
   openId?: string | null;
   onOpen?: (id: string) => void;
 }) {
-  if (error) return <p className="fine">Couldn’t reach Gmail.</p>;
-  if (!messages.length) return <p className="fine">Inbox zero.</p>;
+  if (error) return <p className="fine">메일에 닿지 못했습니다.</p>;
+  if (!messages.length) return <p className="fine">새 메일이 없습니다. Google을 연결하면 여기에 옵니다.</p>;
   return (
     <ul className="peek-scroll rows">
       {messages.map((message) => (
@@ -436,7 +436,7 @@ export function PeekView({
               Connect Google
             </a>
           ) : (
-            <p className="fine">Sample, until Google is connected.</p>
+            <p className="fine">Google을 연결하면 일정이 여기에 옵니다.</p>
           )}
           {googlePhotos.error === "reconnect" ? (
             <a className="text-btn" href="/api/auth/google">
@@ -615,11 +615,11 @@ function SettingsPeek({
       </div>
       <ul className="peek-scroll rows plain">
         <li>Weather · Seoul</li>
-        <li>Mail · {live.mail.source === "google" ? "read and send" : "sample"}</li>
-        <li>Calendar · {live.calendar.source === "google" ? "today, and new events" : "sample"}</li>
+        <li>Mail · {live.mail.source === "google" ? "read and send" : "connect Google"}</li>
+        <li>Calendar · {live.calendar.source === "google" ? "today, and new events" : "connect Google"}</li>
         <li>Photos · {live.connected ? "view and upload" : "this device"}</li>
         <li>Music · YouTube Music search, or Spotify</li>
-        <li>Gemini · {geminiReady == null ? "checking" : geminiReady ? "ready" : "add a key in the app"}</li>
+        <li>Gemini · {geminiReady == null ? "checking" : geminiReady ? "ready" : "save an API key"}</li>
         <li>Radio · news stations</li>
         <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
         <li>Lights · {brightnessSupported ? "this monitor" : "the Windows app on this PC"}</li>

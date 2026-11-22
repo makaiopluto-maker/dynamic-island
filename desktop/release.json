@@ -1,5 +1,6 @@
 {
-  "version": "0.3.0",
-  "notes": "The island stays on top of the desktop.",
-  "download": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe"
+  "version": "1.0.0",
+  "notes": "Gemini chat, news radio volume, and built-in YouTube Music.",
+  "download": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe",
+  "bytes": 96236019
 }

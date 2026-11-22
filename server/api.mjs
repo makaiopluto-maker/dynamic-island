@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { getIdentity } from "../cursor/identity.ts";
 import { dial } from "../shared/radio.mjs";
 import { searchCatalog } from "../shared/youtube.ts";
-import { sampleEvents, sampleMail, seoulDay } from "../shared/sample.mjs";
+import { seoulDay } from "../shared/sample.mjs";
 import { brightnessSupported, readBrightness, writeBrightness } from "./brightness.mjs";
 import { releaseStatus } from "./release.mjs";
 
@@ -89,14 +89,14 @@ function callbackUrl(request) {
   return `${originOf(request)}/api/auth/google/callback`;
 }
 
-function sampleBundle(now) {
+function emptyBundle() {
   return {
     ready: true,
     googleConfigured: googleConfigured(),
     connected: false,
     account: null,
-    mail: { source: "sample", messages: sampleMail(now) },
-    calendar: { source: "sample", events: sampleEvents(now) },
+    mail: { source: "sample", messages: [] },
+    calendar: { source: "sample", events: [] },
   };
 }
 
@@ -1026,16 +1026,16 @@ export async function handleApi(request) {
   }
 
   if (url.pathname === "/api/gemini/key" && request.method === "POST") {
-    if (process.env.ISLAND_DESKTOP !== "1") return json({ error: "forbidden" }, { status: 403 });
     if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
     const file = process.env.ISLAND_GEMINI_FILE;
-    if (!file) return json({ error: "not_configured" }, { status: 404 });
     const body = await request.json().catch(() => null);
     const key = typeof body?.key === "string" ? body.key.trim() : "";
     if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(key)) return json({ error: "bad_request" }, { status: 400 });
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, key, { mode: 0o600 });
-    return json({ configured: true, desktop: true });
+    if (file) {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, key, { mode: 0o600 });
+    }
+    return json({ configured: true, desktop: process.env.ISLAND_DESKTOP === "1" });
   }
 
   if (url.pathname === "/api/gemini" && request.method === "POST") {
@@ -1328,7 +1328,7 @@ export async function handleApi(request) {
   }
 
   if (url.pathname === "/api/live" && request.method === "GET") {
-    if (!credentials || !cookies.gi_at) return json(sampleBundle(now));
+    if (!credentials || !cookies.gi_at) return json(emptyBundle());
     const key = cacheKey(cookies.gi_at);
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < 20_000) return json(hit.body);
@@ -1355,7 +1355,7 @@ export async function handleApi(request) {
       const extra = loaded.tokens ? tokenCookies(loaded.tokens, secure) : [];
       return json(body, { cookies: extra });
     } catch (error) {
-      if (error?.status === 401) return json(sampleBundle(now), { cookies: cleared(secure) });
+      if (error?.status === 401) return json(emptyBundle(), { cookies: cleared(secure) });
       return json({
         ready: true,
         googleConfigured: true,

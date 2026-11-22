@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { sampleEvents, sampleMail } from "../../shared/sample.mjs";
 import type { CalendarEvent, MailMessage } from "../../shared/sample.mjs";
 
 export type { CalendarEvent, MailMessage };
@@ -13,14 +12,14 @@ export type LiveState = {
   calendar: { source: "google" | "sample"; events: CalendarEvent[]; error?: string };
 };
 
-function offline(now: Date): LiveState {
+function offline(): LiveState {
   return {
     ready: true,
     googleConfigured: false,
     connected: false,
     account: null,
-    mail: { source: "sample", messages: sampleMail(now) },
-    calendar: { source: "sample", events: sampleEvents(now) },
+    mail: { source: "sample", messages: [] },
+    calendar: { source: "sample", events: [] },
   };
 }
 
@@ -49,7 +48,7 @@ export function useLive() {
         }
       }
     } catch {
-      setLive(offline(new Date()));
+      setLive(offline());
     }
   }, []);
 

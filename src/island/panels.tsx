@@ -9,7 +9,7 @@ type Radio = ReturnType<typeof useRadio>;
 export function GeminiView({ gemini }: { gemini: Gemini }) {
   const thread = useRef<HTMLDivElement>(null);
   const [key, setKey] = useState("");
-  const locked = gemini.desktop !== true;
+  const needsKey = gemini.configured === false;
   useEffect(() => {
     const node = thread.current;
     if (node) node.scrollTop = node.scrollHeight;
@@ -20,18 +20,16 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
       className="gemini"
       onSubmit={(event) => {
         event.preventDefault();
-        if (locked || !gemini.configured) return;
+        if (needsKey) return;
         void gemini.send();
       }}
     >
       <div className="thread" ref={thread}>
         {gemini.turns.length === 0 ? (
           <p className="fine">
-            {locked
-              ? "Gemini는 이 웹사이트에서 잠겨 있습니다."
-              : gemini.configured
-                ? "Ask Gemini. The answer stays in this island."
-                : "앱에서 채팅하려면 Gemini API 키를 한 번 저장하세요."}
+            {needsKey
+              ? "Gemini API 키를 한 번 저장하면 바로 채팅할 수 있습니다."
+              : "무엇이든 물어보세요. 답은 이 아일랜드에만 남습니다."}
           </p>
         ) : null}
         {gemini.turns.map((turn, index) => (
@@ -39,15 +37,15 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
             {turn.text}
           </p>
         ))}
-        {gemini.pending ? <p className="fine">Gemini is writing…</p> : null}
+        {gemini.pending ? <p className="fine">Gemini가 쓰는 중…</p> : null}
         {gemini.error ? <p className="fine">{gemini.error}</p> : null}
       </div>
-      {gemini.desktop === true && gemini.configured === false ? (
+      {needsKey ? (
         <div className="ask">
           <input
             value={key}
             onChange={(event) => setKey(event.target.value)}
-            placeholder="Gemini API 키"
+            placeholder="AIza… Gemini API 키"
             aria-label="Gemini API key"
             type="password"
             autoComplete="off"
@@ -71,12 +69,12 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
           <input
             value={gemini.draft}
             onChange={(event) => gemini.setDraft(event.target.value)}
-            placeholder="Ask Gemini"
+            placeholder="Gemini에게 묻기"
             aria-label="Message Gemini"
-            disabled={locked || gemini.pending}
+            disabled={gemini.pending || gemini.configured == null}
           />
-          <button type="submit" className="link-btn" disabled={locked || gemini.pending || !gemini.draft.trim()}>
-            Send
+          <button type="submit" className="link-btn" disabled={gemini.pending || !gemini.draft.trim()}>
+            보내기
           </button>
         </div>
       )}

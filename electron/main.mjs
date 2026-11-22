@@ -40,16 +40,44 @@ async function waitForServer(port) {
   throw new Error("The island server did not start.");
 }
 
+function readEnvFile(path) {
+  if (!existsSync(path)) return {};
+  try {
+    const env = {};
+    for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (key) env[key] = value;
+    }
+    return env;
+  } catch {
+    return {};
+  }
+}
+
 function startServer(root, port) {
   let log = "";
+  const userData = app.getPath("userData");
+  const localEnv = {
+    ...readEnvFile(join(root, ".env")),
+    ...readEnvFile(join(userData, "island.env")),
+  };
   child = spawn(process.execPath, ["--experimental-strip-types", join(root, "server", "index.mjs")], {
     cwd: root,
     env: {
       ...process.env,
+      ...localEnv,
       ELECTRON_RUN_AS_NODE: "1",
       HOST: "127.0.0.1",
       ISLAND_DESKTOP: "1",
-      ISLAND_GEMINI_FILE: join(app.getPath("userData"), "gemini-key"),
+      ISLAND_GEMINI_FILE: join(userData, "gemini-key"),
       ISLAND_ROOT: root,
       NODE_ENV: "production",
       PORT: String(port),
