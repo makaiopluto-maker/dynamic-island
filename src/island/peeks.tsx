@@ -15,9 +15,6 @@ function GoogleRow({
   onRefresh?: () => void;
 }) {
   if (!live.ready) return <p className="fine">계정 확인 중…</p>;
-  if (!live.googleConfigured) {
-    return <p className="fine">설정에서 Google OAuth를 저장하면 메일·캘린더·포토가 연결됩니다.</p>;
-  }
   if (!live.connected) {
     return (
       <button
@@ -29,7 +26,7 @@ function GoogleRow({
           });
         }}
       >
-        Google 연결
+        Google로 로그인
       </button>
     );
   }
@@ -556,7 +553,7 @@ export function PeekView({
             >
               Google Photos에서 선택
             </button>
-          ) : live.googleConfigured ? (
+          ) : (
             <button
               type="button"
               className="link-btn"
@@ -566,10 +563,8 @@ export function PeekView({
                 });
               }}
             >
-              Google Photos 연결
+              Google로 로그인
             </button>
-          ) : (
-            <p className="fine">설정에서 Google OAuth를 저장한 뒤 연결하세요.</p>
           )}
           {googlePhotos.error === "reconnect" ? (
             <button type="button" className="text-btn" onClick={() => void connectGoogle().then((ok) => ok && onRefresh())}>
@@ -714,35 +709,6 @@ function SettingsPeek({
   onRefresh: () => void;
 }) {
   const alerts = useAlertPermission();
-  const desktop = Boolean(window.islandDesktop);
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
-  const [setupNote, setSetupNote] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const saveGoogle = async () => {
-    setSaving(true);
-    setSetupNote("");
-    try {
-      const response = await fetch("/api/google/setup", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: clientId, secret: clientSecret }),
-      });
-      if (!response.ok) {
-        setSetupNote("이 PC 설치본에서만 Google OAuth를 저장할 수 있습니다.");
-        return;
-      }
-      setClientId("");
-      setClientSecret("");
-      setSetupNote("저장했습니다. 이제 Google을 연결하세요.");
-      onRefresh();
-    } catch {
-      setSetupNote("저장하지 못했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <div className="peek stack">
@@ -753,20 +719,10 @@ function SettingsPeek({
       <div className="setting">
         <span>
           <strong>Google</strong>
-          <em>
-            {live.connected
-              ? (live.account ?? "연결됨")
-              : live.googleConfigured
-                ? "메일 · 캘린더 · Google Photos"
-                : desktop
-                  ? "OAuth 클라이언트 ID/Secret 저장 필요"
-                  : "배포 환경의 Google 비밀값이 필요합니다"}
-          </em>
+          <em>{live.connected ? (live.account ?? "연결됨") : "메일 · 캘린더 · Google Photos"}</em>
         </span>
         {!live.ready ? (
           <span className="badge">…</span>
-        ) : !live.googleConfigured ? (
-          <span className="badge">설정</span>
         ) : live.connected ? (
           <span className="setting-actions">
             <button type="button" className="text-btn" onClick={() => void connectGoogle().then((ok) => ok && onRefresh())}>
@@ -778,39 +734,10 @@ function SettingsPeek({
           </span>
         ) : (
           <button type="button" className="link-btn" onClick={() => void connectGoogle().then((ok) => ok && onRefresh())}>
-            연결
+            Google로 로그인
           </button>
         )}
       </div>
-      {!live.googleConfigured && desktop ? (
-        <form
-          className="composer"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void saveGoogle();
-          }}
-        >
-          <label className="field">
-            Client ID
-            <input value={clientId} onChange={(event) => setClientId(event.target.value)} required autoComplete="off" />
-          </label>
-          <label className="field">
-            Client Secret
-            <input
-              value={clientSecret}
-              onChange={(event) => setClientSecret(event.target.value)}
-              required
-              type="password"
-              autoComplete="off"
-            />
-          </label>
-          <button type="submit" className="link-btn" disabled={saving}>
-            {saving ? "저장 중…" : "Google OAuth 저장"}
-          </button>
-          <p className="fine">Google Cloud Console 웹 클라이언트 · 리디렉션 URI에 http://127.0.0.1:포트/api/auth/google/callback 추가</p>
-          {setupNote ? <p className="fine">{setupNote}</p> : null}
-        </form>
-      ) : null}
       <div className="setting">
         <span>
           <strong>Alerts</strong>
@@ -894,24 +821,19 @@ function WeatherPeek({
         </>
       ) : (
         <>
-          <p className="fine">Google을 연결하면 오늘 일정이 여기에 옵니다.</p>
-          {live.googleConfigured ? (
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => {
-                void connectGoogle().then((ok) => {
-                  if (ok) onRefresh();
-                });
-              }}
-            >
-              Google 연결
-            </button>
-          ) : (
-            <button type="button" className="link-btn" onClick={onOpenSettings}>
-              Settings에서 Google 설정
-            </button>
-          )}
+          <p className="fine">Google로 로그인하면 오늘 일정이 여기에 옵니다.</p>
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              void connectGoogle().then((ok) => {
+                if (ok) onRefresh();
+                else onOpenSettings();
+              });
+            }}
+          >
+            Google로 로그인
+          </button>
         </>
       )}
     </div>

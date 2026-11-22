@@ -15,18 +15,18 @@ npm run dev
 
 - 알약을 클릭하면 홈이 펼쳐집니다. 가운데 주황 점이나 바깥을 누르면 접힙니다. 시간 옆 `···`은 메뉴입니다.
 - 아래 독에서 Home, Music, AI, Radio로 이동합니다. 양쪽 `+`는 설정입니다.
-- YouTube Music은 목록에서 곡을 고르거나 검색합니다. Spotify는 로그인 후 플레이어에서 재생합니다.
+- YouTube Music은 목록에서 곡을 고르거나 검색창에서 Enter로 찾습니다.
 - 라디오는 뉴스 채널과 음량 슬라이더를 씁니다.
-- AI는 설치만 하면 됩니다. API 키·OpenClaw·별도 설치 없이, 처음 열 때 모델이 자동으로 준비됩니다.
+- AI는 Gemini로 답합니다. Enter로 메시지를 보냅니다. PC에서 큰 모델을 돌리지 않아 멈추지 않습니다.
 - `1` `2` `3` `4`는 홈, 음악, AI, Radio입니다. `Esc`는 한 단계씩 접습니다.
 
 ## 연결된 것들
 
 - **날씨**는 서울 기온입니다.
-- **메일·캘린더**는 Google 연결 후에만 채워집니다. 연결 전에는 비어 있고 “연결 필요”로 표시됩니다.
+- **메일 · 캘린더 · Google Photos**는 Google로 로그인만 하면 바로 씁니다. Client ID를 따로 넣을 필요가 없습니다.
 - **음악**은 YouTube Music / Spotify입니다.
 - **라디오**는 YTN, KBS 1라디오, MBC 표준FM, CBS 표준FM, SBS 러브FM, TBS 교통방송입니다.
-- **AI**는 이 PC에서 바로 돌아갑니다. 키 입력·외부 Gateway 설정이 없습니다.
+- **AI**는 Gemini입니다. 배포 환경에 키가 있으면 바로 채팅하고, 없으면 Google AI Studio 키를 한 번만 저장합니다.
 - **조명**은 윈도우 설치본에서만 모니터 밝기를 바꿉니다.
 
 ## 윈도우 설치 파일
@@ -37,4 +37,4 @@ npm run dev
 npm run dist:win
 ```
 
-결과물은 `release/Dynamic-Island-Setup.exe` 입니다.
+결과물은 `release/Dynamic-Island-Setup.exe` 입니다. Google 로그인·Gemini를 설치본에 넣으려면 빌드 전에 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GEMINI_API_KEY`를 환경에 두면 `electron/seed-google.mjs`가 시드 파일을 만듭니다.

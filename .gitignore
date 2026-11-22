@@ -12,6 +12,11 @@ dist
 dist-ssr
 release
 *.local
+desktop/*.exe
+desktop/google-oauth.seed.json
+desktop/gemini.seed
+desktop/island.env
+.env
 
 # Editor directories and files
 .vscode/*

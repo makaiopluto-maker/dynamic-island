@@ -251,6 +251,11 @@ function YouTubeMusic({
         <input
           value={youtube.query}
           onChange={(event) => youtube.setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            void youtube.search();
+          }}
           placeholder="노래 · 아티스트 검색"
           aria-label="Find a song"
         />

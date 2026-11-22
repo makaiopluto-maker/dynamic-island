@@ -1,8 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, screen, Tray } from "electron";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { compareVersions, releaseFeed } from "../shared/release.mjs";
 
@@ -16,6 +16,32 @@ let quitting = false;
 function appRoot() {
   if (app.isPackaged) return join(process.resourcesPath, "app");
   return join(import.meta.dirname, "..");
+}
+
+function seedIfMissing(from, to, validate) {
+  if (!from || !to || !existsSync(from) || existsSync(to)) return;
+  try {
+    const raw = readFileSync(from, "utf8");
+    if (validate && !validate(raw)) return;
+  } catch {
+    return;
+  }
+  mkdirSync(dirname(to), { recursive: true });
+  copyFileSync(from, to);
+}
+
+function ensureBundledSecrets(root, userData) {
+  seedIfMissing(join(root, "desktop", "google-oauth.seed.json"), join(userData, "google-oauth.json"), (raw) => {
+    try {
+      const data = JSON.parse(raw);
+      return Boolean(typeof data?.id === "string" && data.id.trim() && typeof data?.secret === "string" && data.secret.trim());
+    } catch {
+      return false;
+    }
+  });
+  seedIfMissing(join(root, "desktop", "gemini.seed"), join(userData, "gemini-key"), (raw) =>
+    /^AIza[0-9A-Za-z_-]{20,}$/.test(raw.trim()),
+  );
 }
 
 function freePort(start) {
@@ -65,8 +91,10 @@ function readEnvFile(path) {
 function startServer(root, port) {
   let log = "";
   const userData = app.getPath("userData");
+  ensureBundledSecrets(root, userData);
   const localEnv = {
     ...readEnvFile(join(root, ".env")),
+    ...readEnvFile(join(root, "desktop", "island.env")),
     ...readEnvFile(join(userData, "island.env")),
   };
   child = spawn(process.execPath, ["--experimental-strip-types", join(root, "server", "index.mjs")], {

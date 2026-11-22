@@ -69,12 +69,6 @@ export default defineConfig({
     __ISLAND_VERSION__: JSON.stringify(islandVersion),
   },
   plugins: [react(), sourceEntry(), islandApi()],
-  optimizeDeps: {
-    exclude: ["@huggingface/transformers"],
-  },
-  worker: {
-    format: "es",
-  },
   server: {
     host: "127.0.0.1",
     port: 4731,

@@ -21,9 +21,8 @@ const SCOPES = [
 
 const cache = new Map();
 
-function savedGoogleClient() {
-  const file = process.env.ISLAND_GOOGLE_FILE;
-  if (!file || process.env.ISLAND_DESKTOP !== "1") return null;
+function readGooglePair(file) {
+  if (!file) return null;
   try {
     const raw = JSON.parse(readFileSync(file, "utf8"));
     const id = typeof raw?.id === "string" ? raw.id.trim() : "";
@@ -33,6 +32,14 @@ function savedGoogleClient() {
   } catch {
     return null;
   }
+}
+
+function savedGoogleClient() {
+  if (process.env.ISLAND_DESKTOP !== "1") return null;
+  return (
+    readGooglePair(process.env.ISLAND_GOOGLE_FILE) ||
+    readGooglePair(process.env.ISLAND_ROOT ? `${process.env.ISLAND_ROOT}/desktop/google-oauth.seed.json` : "")
+  );
 }
 
 export function googleConfigured() {
@@ -1425,7 +1432,7 @@ export async function handleApi(request) {
   }
 
   if (url.pathname === "/api/auth/google" && request.method === "GET") {
-    if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+    if (!credentials) return redirect("/?google=setup");
     const state = randomBytes(16).toString("hex");
     const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     auth.searchParams.set("client_id", credentials.id);

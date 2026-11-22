@@ -4,7 +4,7 @@ Unicode true
 !include "FileFunc.nsh"
 
 !define PRODUCT_NAME "Dynamic Island"
-!define PRODUCT_VERSION "1.3.1"
+!define PRODUCT_VERSION "1.4.0"
 !define PRODUCT_REG "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define RUN_REG "Software\Microsoft\Windows\CurrentVersion\Run"
 

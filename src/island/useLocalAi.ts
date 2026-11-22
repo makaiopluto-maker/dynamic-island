@@ -1,76 +1,63 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type AiTurn = { role: "user" | "model"; text: string };
 
-type AiStatus = "loading" | "ready" | "error";
+type AiStatus = "loading" | "ready" | "need_key" | "error";
 
-type Generator = (
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
-  options: {
-    max_new_tokens?: number;
-    do_sample?: boolean;
-    temperature?: number;
-    top_p?: number;
-  },
-) => Promise<Array<{ generated_text: Array<{ role: string; content: string }> | string }>>;
-
-const MODEL = "onnx-community/Qwen2.5-0.5B-Instruct";
+const KEY_STORE = "island-gemini-key";
+const MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
 const SYSTEM =
   "You are the AI inside Dynamic Island, a small glass panel on Windows. Reply in the user's language. Keep most answers under 80 words unless they ask for more.";
 
-let shared: Promise<Generator> | null = null;
-
-type ProgressEvent = {
-  status?: string;
-  progress?: number;
-  file?: string;
-  loaded?: number;
-  total?: number;
-};
-
-function friendlyProgress(event: ProgressEvent) {
-  if (event.status === "initiate") return { text: "AI 준비 중…", progress: 0.02 };
-  if (event.status === "download") return { text: "AI 모델 받는 중…", progress: 0.05 };
-  if (event.status === "progress") {
-    const ratio =
-      typeof event.progress === "number"
-        ? event.progress / 100
-        : event.total
-          ? (event.loaded ?? 0) / event.total
-          : 0;
-    return {
-      text: "AI 모델 받는 중…",
-      progress: Math.max(0.05, Math.min(0.95, ratio)),
-    };
+function readKey() {
+  try {
+    const key = localStorage.getItem(KEY_STORE)?.trim() ?? "";
+    return /^AIza[0-9A-Za-z_-]{20,}$/.test(key) ? key : "";
+  } catch {
+    return "";
   }
-  if (event.status === "done") return { text: "모델 파일 준비됨…", progress: 0.96 };
-  if (event.status === "ready") return { text: "거의 다 됐어요…", progress: 0.98 };
-  return null;
 }
 
-async function loadGenerator(onProgress: (text: string, progress: number) => void): Promise<Generator> {
-  onProgress("AI 준비 중…", 0.02);
-  const { pipeline, env } = await import("@huggingface/transformers");
-  env.allowLocalModels = false;
-  env.useBrowserCache = true;
-  const generator = await pipeline("text-generation", MODEL, {
-    device: "wasm",
-    dtype: "q4",
-    progress_callback: (event: ProgressEvent) => {
-      const next = friendlyProgress(event);
-      if (next) onProgress(next.text, next.progress);
-    },
-  });
-  onProgress("준비됨", 1);
-  return generator as unknown as Generator;
+function writeKey(key: string) {
+  localStorage.setItem(KEY_STORE, key);
 }
 
-function answerFrom(output: Awaited<ReturnType<Generator>>) {
-  const generated = output?.[0]?.generated_text;
-  if (typeof generated === "string") return generated.trim();
-  if (!Array.isArray(generated)) return "";
-  const last = [...generated].reverse().find((item) => item.role === "assistant");
-  return typeof last?.content === "string" ? last.content.trim() : "";
+async function askDirect(messages: AiTurn[], key: string) {
+  const contents = messages.map((message) => ({
+    role: message.role === "model" ? "model" : "user",
+    parts: [{ text: message.text }],
+  }));
+  for (const model of MODELS) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM }] },
+          contents,
+          generationConfig: { maxOutputTokens: 400, temperature: 0.7 },
+        }),
+        signal: AbortSignal.timeout(20000),
+      },
+    );
+    if (response.status === 404) continue;
+    if (!response.ok) {
+      if (response.status === 400 || response.status === 403) return { error: "bad_key" as const };
+      return { error: "unreachable" as const };
+    }
+    const data = (await response.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((part) => (typeof part.text === "string" ? part.text : ""))
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+    if (!text) return { error: "unreachable" as const };
+    return { text };
+  }
+  return { error: "unreachable" as const };
 }
 
 export function useLocalAi(enabled = false) {
@@ -78,90 +65,126 @@ export function useLocalAi(enabled = false) {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<AiStatus>("loading");
-  const [progress, setProgress] = useState(0);
-  const [progressText, setProgressText] = useState("AI 준비 중…");
+  const [localKey, setLocalKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const generator = useRef<Generator | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
-    if (!shared) {
-      shared = loadGenerator((text, value) => {
-        if (!alive) return;
-        setProgressText(text);
-        setProgress(Math.max(0, Math.min(1, value)));
-      }).catch((reason) => {
-        shared = null;
-        throw reason;
-      });
+    const stored = readKey();
+    if (stored) {
+      setLocalKey(stored);
+      setStatus("ready");
+      return;
     }
-    shared
-      .then((instance) => {
+    setStatus("loading");
+    fetch("/api/gemini", { signal: AbortSignal.timeout(5000) })
+      .then((response) => response.json())
+      .then((body: { configured?: boolean }) => {
         if (!alive) return;
-        generator.current = instance;
-        setStatus("ready");
-        setProgress(1);
-        setProgressText("준비됨");
-        setError(null);
+        setStatus(body.configured ? "ready" : "need_key");
       })
       .catch(() => {
         if (!alive) return;
-        setStatus("error");
-        setError("AI를 준비하지 못했습니다. 인터넷 연결 후 다시 시도하세요.");
+        setStatus("need_key");
       });
     return () => {
       alive = false;
     };
   }, [attempt, enabled]);
 
-  const retry = useCallback(() => {
-    shared = null;
-    generator.current = null;
-    setStatus("loading");
-    setProgress(0);
-    setProgressText("AI 준비 중…");
+  const saveKey = useCallback(async (key: string) => {
+    const trimmed = key.trim();
+    if (!trimmed || pending) return false;
+    if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(trimmed)) {
+      setError("Google AI 키 형식이 올바르지 않습니다.");
+      return false;
+    }
+    setPending(true);
     setError(null);
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(trimmed)}`,
+        { signal: AbortSignal.timeout(10000) },
+      );
+      if (!response.ok) {
+        setError("그 키로는 연결되지 않습니다.");
+        return false;
+      }
+      writeKey(trimmed);
+      setLocalKey(trimmed);
+      setStatus("ready");
+      try {
+        await fetch("/api/gemini/key", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ key: trimmed }),
+        });
+      } catch {
+        /* Local key is enough. */
+      }
+      return true;
+    } catch {
+      setError("그 키로는 연결되지 않습니다.");
+      return false;
+    } finally {
+      setPending(false);
+    }
+  }, [pending]);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setStatus("loading");
     setAttempt((value) => value + 1);
   }, []);
 
   const send = useCallback(async () => {
     const text = draft.trim();
-    if (!text || pending || status !== "ready" || !generator.current) return;
+    if (!text || pending || status !== "ready") return;
     const history = [...turns, { role: "user" as const, text }];
     setTurns(history);
     setDraft("");
     setPending(true);
     setError(null);
     try {
-      const output = await generator.current(
-        [
-          { role: "system", content: SYSTEM },
-          ...history.map((turn) => ({
-            role: (turn.role === "model" ? "assistant" : "user") as "assistant" | "user",
-            content: turn.text,
-          })),
-        ],
-        {
-          max_new_tokens: 180,
-          do_sample: true,
-          temperature: 0.7,
-          top_p: 0.9,
-        },
-      );
-      const answer = answerFrom(output);
-      if (!answer) {
+      if (localKey) {
+        const result = await askDirect(history, localKey);
+        if (result.error === "bad_key") {
+          setStatus("need_key");
+          setError("Google AI 키를 다시 저장하세요.");
+          return;
+        }
+        if (result.error || !result.text) {
+          setError("AI가 답하지 않았습니다.");
+          return;
+        }
+        setTurns([...history, { role: "model", text: result.text }]);
+        return;
+      }
+      const response = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: history }),
+        signal: AbortSignal.timeout(25000),
+      });
+      const body = (await response.json()) as { text?: string; error?: string };
+      if (!response.ok || !body.text) {
+        if (body.error === "not_configured") {
+          setStatus("need_key");
+          setError("Google AI 키를 저장하면 채팅할 수 있습니다.");
+          return;
+        }
         setError("AI가 답하지 않았습니다.");
         return;
       }
-      setTurns([...history, { role: "model", text: answer }]);
+      setTurns([...history, { role: "model", text: body.text }]);
     } catch {
       setError("AI가 답하지 않았습니다.");
     } finally {
       setPending(false);
     }
-  }, [draft, pending, status, turns]);
+  }, [draft, localKey, pending, status, turns]);
 
   const lastReply = [...turns].reverse().find((turn) => turn.role === "model")?.text ?? "";
   const configured: boolean | null = status === "loading" ? null : status === "ready";
@@ -173,10 +196,11 @@ export function useLocalAi(enabled = false) {
     pending,
     configured,
     status,
-    progress,
-    progressText,
+    progress: status === "ready" ? 1 : status === "loading" ? 0.4 : 0,
+    progressText: status === "loading" ? "AI 준비 중…" : status === "ready" ? "준비됨" : "",
     error,
     send,
+    saveKey,
     retry,
     lastReply,
   };

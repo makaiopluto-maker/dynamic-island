@@ -8,7 +8,9 @@ type Radio = ReturnType<typeof useRadio>;
 
 export function GeminiView({ gemini }: { gemini: LocalAi }) {
   const thread = useRef<HTMLDivElement>(null);
+  const [key, setKey] = useState("");
   const loading = gemini.status === "loading";
+  const needsKey = gemini.status === "need_key";
   useEffect(() => {
     const node = thread.current;
     if (node) node.scrollTop = node.scrollHeight;
@@ -19,6 +21,7 @@ export function GeminiView({ gemini }: { gemini: LocalAi }) {
       className="gemini"
       onSubmit={(event) => {
         event.preventDefault();
+        if (needsKey) return;
         if (gemini.status !== "ready") return;
         void gemini.send();
       }}
@@ -26,14 +29,18 @@ export function GeminiView({ gemini }: { gemini: LocalAi }) {
       <div className="thread" ref={thread}>
         {loading ? (
           <div className="ai-load">
-            <p className="fine">{gemini.progressText || "AI 준비 중…"}</p>
+            <p className="fine">AI 준비 중…</p>
             <div className="ai-bar" aria-hidden="true">
-              <span style={{ width: `${Math.round(gemini.progress * 100)}%` }} />
+              <span style={{ width: "40%" }} />
             </div>
           </div>
         ) : null}
         {!loading && gemini.turns.length === 0 ? (
-          <p className="fine">무엇이든 물어보세요. 답은 이 PC 안에서만 만들어집니다.</p>
+          <p className="fine">
+            {needsKey
+              ? "Google AI Studio 키를 한 번 저장하면 바로 채팅할 수 있습니다. PC를 멈추지 않습니다."
+              : "무엇이든 물어보세요."}
+          </p>
         ) : null}
         {gemini.turns.map((turn, index) => (
           <p key={`${turn.role}-${index}`} className={turn.role === "user" ? "bubble user" : "bubble model"}>
@@ -49,11 +56,47 @@ export function GeminiView({ gemini }: { gemini: LocalAi }) {
             다시 시도
           </button>
         </div>
+      ) : needsKey ? (
+        <div className="ask">
+          <input
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              void gemini.saveKey(key).then((saved) => {
+                if (saved) setKey("");
+              });
+            }}
+            placeholder="AIza… Google AI 키"
+            aria-label="Google AI key"
+            type="password"
+            autoComplete="off"
+            disabled={gemini.pending}
+          />
+          <button
+            type="button"
+            className="link-btn"
+            disabled={gemini.pending || !key.trim()}
+            onClick={() => {
+              void gemini.saveKey(key).then((saved) => {
+                if (saved) setKey("");
+              });
+            }}
+          >
+            저장
+          </button>
+        </div>
       ) : (
         <div className="ask">
           <input
             value={gemini.draft}
             onChange={(event) => gemini.setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              if (gemini.status === "ready" && gemini.draft.trim()) void gemini.send();
+            }}
             placeholder={loading ? "AI 준비 중…" : "AI에게 묻기"}
             aria-label="Message AI"
             disabled={gemini.pending || gemini.status !== "ready"}
@@ -178,7 +221,17 @@ export function RadioView({ radio }: { radio: Radio }) {
       >
         <label className="field">
           뉴스 찾기
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="YTN, KBS, BBC" aria-label="Find a news station" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              void search();
+            }}
+            placeholder="YTN, KBS, BBC"
+            aria-label="Find a news station"
+          />
         </label>
         <button type="submit" className="link-btn">
           Search
