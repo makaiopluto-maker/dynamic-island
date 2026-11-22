@@ -1,15 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
-import type { useGemini } from "./useGemini.ts";
+import type { useOpenClaw } from "./useOpenClaw.ts";
 import type { Station, useRadio } from "./useRadio.ts";
 
-type Gemini = ReturnType<typeof useGemini>;
+type OpenClaw = ReturnType<typeof useOpenClaw>;
 type Radio = ReturnType<typeof useRadio>;
 
-export function GeminiView({ gemini }: { gemini: Gemini }) {
+function openClawHint(status: OpenClaw["status"]) {
+  if (status === "checking") return "OpenClaw Gateway를 확인하는 중…";
+  if (status === "offline") {
+    return "PC에 OpenClaw를 설치하고 Gateway를 켠 뒤 다시 시도하세요. powershell -c \"irm https://openclaw.ai/install.ps1 | iex\"";
+  }
+  if (status === "disabled") {
+    return "~/.openclaw/openclaw.json 에서 gateway.http.endpoints.chatCompletions.enabled 를 true 로 켠 다음 Gateway를 재시작하세요.";
+  }
+  if (status === "need_token") {
+    return "OpenClaw Gateway 토큰을 한 번 저장하면 이 아일랜드에서 바로 쓸 수 있습니다.";
+  }
+  return "무엇이든 물어보세요. 답은 OpenClaw를 통해 이 아일랜드에만 남습니다.";
+}
+
+export function GeminiView({ gemini }: { gemini: OpenClaw }) {
   const thread = useRef<HTMLDivElement>(null);
-  const [key, setKey] = useState("");
-  const needsKey = gemini.configured === false;
+  const [token, setToken] = useState("");
+  const needsSetup = gemini.status !== "ready" && gemini.status !== "checking";
+  const needsToken = gemini.status === "need_token" || (needsSetup && Boolean(token));
   useEffect(() => {
     const node = thread.current;
     if (node) node.scrollTop = node.scrollHeight;
@@ -20,33 +35,27 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
       className="gemini"
       onSubmit={(event) => {
         event.preventDefault();
-        if (needsKey) return;
+        if (gemini.status !== "ready") return;
         void gemini.send();
       }}
     >
       <div className="thread" ref={thread}>
-        {gemini.turns.length === 0 ? (
-          <p className="fine">
-            {needsKey
-              ? "Gemini API 키를 한 번 저장하면 바로 채팅할 수 있습니다."
-              : "무엇이든 물어보세요. 답은 이 아일랜드에만 남습니다."}
-          </p>
-        ) : null}
+        {gemini.turns.length === 0 ? <p className="fine">{openClawHint(gemini.status)}</p> : null}
         {gemini.turns.map((turn, index) => (
           <p key={`${turn.role}-${index}`} className={turn.role === "user" ? "bubble user" : "bubble model"}>
             {turn.text}
           </p>
         ))}
-        {gemini.pending ? <p className="fine">Gemini가 쓰는 중…</p> : null}
+        {gemini.pending ? <p className="fine">OpenClaw가 쓰는 중…</p> : null}
         {gemini.error ? <p className="fine">{gemini.error}</p> : null}
       </div>
-      {needsKey ? (
+      {needsSetup ? (
         <div className="ask">
           <input
-            value={key}
-            onChange={(event) => setKey(event.target.value)}
-            placeholder="AIza… Gemini API 키"
-            aria-label="Gemini API key"
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+            placeholder="OpenClaw Gateway 토큰 (선택)"
+            aria-label="OpenClaw gateway token"
             type="password"
             autoComplete="off"
             disabled={gemini.pending}
@@ -54,14 +63,15 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
           <button
             type="button"
             className="link-btn"
-            disabled={gemini.pending || !key.trim()}
+            disabled={gemini.pending}
             onClick={() => {
-              void gemini.saveKey(key).then((saved) => {
-                if (saved) setKey("");
+              void gemini.saveToken(token).then((saved) => {
+                if (saved) setToken("");
+                else void gemini.refresh();
               });
             }}
           >
-            저장
+            {needsToken && token.trim() ? "연결" : "다시 확인"}
           </button>
         </div>
       ) : (
@@ -69,9 +79,9 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
           <input
             value={gemini.draft}
             onChange={(event) => gemini.setDraft(event.target.value)}
-            placeholder="Gemini에게 묻기"
-            aria-label="Message Gemini"
-            disabled={gemini.pending || gemini.configured == null}
+            placeholder="OpenClaw에게 묻기"
+            aria-label="Message OpenClaw"
+            disabled={gemini.pending || gemini.status !== "ready"}
           />
           <button type="submit" className="link-btn" disabled={gemini.pending || !gemini.draft.trim()}>
             보내기

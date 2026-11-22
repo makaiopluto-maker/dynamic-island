@@ -1,7 +1,7 @@
 {
   "name": "dynamic-island",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4731 --strictPort",
@@ -28,7 +28,10 @@
     "directories": {
       "output": "release"
     },
-    "electronLanguages": ["en-US", "ko"],
+    "electronLanguages": [
+      "en-US",
+      "ko"
+    ],
     "files": [
       "dist/**/*",
       "electron/**/*",

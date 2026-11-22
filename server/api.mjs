@@ -950,6 +950,85 @@ function geminiReady() {
   return Boolean(geminiKey());
 }
 
+const OPENCLAW_DEFAULT = "http://127.0.0.1:18789";
+
+function openClawBase(raw) {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  if (!value) return OPENCLAW_DEFAULT;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return OPENCLAW_DEFAULT;
+    if (!["127.0.0.1", "localhost", "::1"].includes(url.hostname)) return OPENCLAW_DEFAULT;
+    return url.origin;
+  } catch {
+    return OPENCLAW_DEFAULT;
+  }
+}
+
+function openClawToken(request) {
+  const header = request.headers.get("authorization") ?? "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() ?? "";
+}
+
+async function probeOpenClaw(base, token) {
+  try {
+    const response = await fetch(`${base}/v1/models`, {
+      headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      signal: AbortSignal.timeout(4000),
+    });
+    if (response.status === 401 || response.status === 403) return "need_token";
+    if (response.status === 404) return "disabled";
+    if (!response.ok) return "offline";
+    return "ready";
+  } catch {
+    return "offline";
+  }
+}
+
+async function askOpenClaw(base, token, messages) {
+  const response = await fetch(`${base}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      model: "openclaw/default",
+      user: "island:dynamic-island",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are the AI inside Dynamic Island, a small glass panel on Windows. Reply in the user's language. Keep most answers under 80 words unless they ask for more.",
+        },
+        ...messages.map((message) => ({
+          role: message.role === "model" ? "assistant" : "user",
+          content: message.text,
+        })),
+      ],
+    }),
+    signal: AbortSignal.timeout(60000),
+  });
+  if (response.status === 401 || response.status === 403) return { error: "need_token", status: 401 };
+  if (response.status === 404) return { error: "disabled", status: 404 };
+  if (!response.ok) return { error: "unreachable", status: 502 };
+  const data = await response.json();
+  const raw = data?.choices?.[0]?.message?.content;
+  const text =
+    typeof raw === "string"
+      ? raw.trim()
+      : Array.isArray(raw)
+        ? raw
+            .map((part) => (typeof part?.text === "string" ? part.text : ""))
+            .filter(Boolean)
+            .join("\n")
+            .trim()
+        : "";
+  if (!text) return { error: "unreachable", status: 502 };
+  return { text };
+}
+
 async function askGemini(messages) {
   const contents = messages.map((message) => ({
     role: message.role,
@@ -1020,6 +1099,29 @@ export async function handleApi(request) {
   const secure = secureRequest(request);
   const cookies = readCookies(request);
   const credentials = client();
+
+  if (url.pathname === "/api/openclaw" && request.method === "GET") {
+    const token = openClawToken(request);
+    const base = openClawBase(url.searchParams.get("base"));
+    const status = await probeOpenClaw(base, token);
+    return json({ status, configured: status === "ready", base, desktop: process.env.ISLAND_DESKTOP === "1" });
+  }
+
+  if (url.pathname === "/api/openclaw" && request.method === "POST") {
+    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    const token = openClawToken(request);
+    const body = await request.json().catch(() => null);
+    const base = openClawBase(body?.base);
+    const messages = cleanMessages(body);
+    if (!messages) return json({ error: "bad_request" }, { status: 400 });
+    try {
+      const result = await askOpenClaw(base, token, messages);
+      if (result.error) return json({ error: result.error }, { status: result.status });
+      return json({ text: result.text });
+    } catch {
+      return json({ error: "unreachable" }, { status: 502 });
+    }
+  }
 
   if (url.pathname === "/api/gemini" && request.method === "GET") {
     return json({ configured: geminiReady(), desktop: process.env.ISLAND_DESKTOP === "1" });

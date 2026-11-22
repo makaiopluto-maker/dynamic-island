@@ -6,7 +6,7 @@ import { mastHeight } from "./island/format.ts";
 import type { Compact, PeekId, View } from "./island/types.ts";
 import { useMusic, useNow, useViewport } from "./island/useActivities.ts";
 import { useBrightness } from "./island/useBrightness.ts";
-import { useGemini } from "./island/useGemini.ts";
+import { useOpenClaw } from "./island/useOpenClaw.ts";
 import { useRadio } from "./island/useRadio.ts";
 import { useMusicSource, useSpotify } from "./island/useSpotify.ts";
 import { useYouTube } from "./island/useYouTube.ts";
@@ -22,7 +22,7 @@ export default function App() {
   const youtube = useYouTube(live.connected);
   const spotify = useSpotify();
   const { source, setSource } = useMusicSource();
-  const gemini = useGemini();
+  const gemini = useOpenClaw();
   const brightness = useBrightness();
   const [opened] = useState(() => new URLSearchParams(window.location.search).get("open"));
   const overlay = new URLSearchParams(window.location.search).get("overlay") === "1";
@@ -214,7 +214,7 @@ export default function App() {
           onRefresh={() => void reload()}
         />
       </div>
-      {overlay ? null : <p className="keys">Esc closes · 1 Home · 2 Music · 3 Gemini · 4 Radio</p>}
+      {overlay ? null : <p className="keys">Esc closes · 1 Home · 2 Music · 3 OpenClaw · 4 Radio</p>}
       {overlay ? null : <ReleaseNotice />}
       <p className="sr-only" aria-live="polite">
         {view === "idle" ? "Dynamic Island closed" : `Dynamic Island showing ${view}`}

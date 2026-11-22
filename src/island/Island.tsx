@@ -9,7 +9,7 @@ import { GeminiView, RadioView } from "./panels.tsx";
 import type { Compact, Frame, PeekId, View } from "./types.ts";
 import type { useMusic } from "./useActivities.ts";
 import type { useBrightness } from "./useBrightness.ts";
-import type { useGemini } from "./useGemini.ts";
+import type { useOpenClaw } from "./useOpenClaw.ts";
 import type { useRadio } from "./useRadio.ts";
 import type { MusicSource, useSpotify } from "./useSpotify.ts";
 import type { useYouTube } from "./useYouTube.ts";
@@ -19,7 +19,7 @@ type Music = ReturnType<typeof useMusic>;
 type Radio = ReturnType<typeof useRadio>;
 type YouTube = ReturnType<typeof useYouTube>;
 type Spotify = ReturnType<typeof useSpotify>;
-type Gemini = ReturnType<typeof useGemini>;
+type Gemini = ReturnType<typeof useOpenClaw>;
 type Brightness = ReturnType<typeof useBrightness>;
 
 export function Island({
@@ -123,7 +123,7 @@ export function Island({
             ? gemini.lastReply.slice(0, 42)
             : gemini.configured
               ? "무엇이든 물어보세요"
-              : "키를 저장하세요"
+              : "OpenClaw 연결"
         }
         onMusic={onMusic}
         onGemini={() => onOpen("gemini")}
@@ -215,7 +215,7 @@ export function Island({
                     Spotify
                   </button>
                   <button type="button" role="menuitem" onClick={() => { setMenu(false); onOpen("gemini"); }}>
-                    Gemini
+                    OpenClaw
                   </button>
                   <button type="button" role="menuitem" onClick={() => { setMenu(false); onOpen("radio"); }}>
                     Radio
