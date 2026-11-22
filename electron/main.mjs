@@ -7,6 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { compareVersions, releaseFeed } from "../shared/release.mjs";
 
 const devUrl = process.env.ELECTRON_START_URL;
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 let child = null;
 let tray = null;
 let overlay = null;
@@ -48,6 +49,7 @@ function startServer(root, port) {
       ELECTRON_RUN_AS_NODE: "1",
       HOST: "127.0.0.1",
       ISLAND_DESKTOP: "1",
+      ISLAND_GEMINI_FILE: join(app.getPath("userData"), "gemini-key"),
       ISLAND_ROOT: root,
       NODE_ENV: "production",
       PORT: String(port),

@@ -672,12 +672,31 @@ input:focus-visible {
 .yt-layout { display: grid; grid-template-columns: minmax(160px, 240px) minmax(0, 1fr); gap: 12px; }
 .yt-engine {
   position: absolute;
-  inset: 0;
-  z-index: 0;
+  left: 0;
+  top: 0;
+  width: min(100%, 480px);
+  height: 270px;
   overflow: hidden;
+  z-index: 0;
   pointer-events: none;
 }
-.yt-engine iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
+.yt-engine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(14, 12, 11, 0.96);
+}
+.yt-engine iframe {
+  width: 480px;
+  height: 270px;
+  border: 0;
+  pointer-events: none;
+}
+.music-stage.yt > *:not(.yt-engine) {
+  position: relative;
+  z-index: 1;
+}
 .now {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
@@ -1253,6 +1272,7 @@ button.row[aria-current="true"] { background: rgba(255, 255, 255, 0.08); }
 }
 .radio { overflow: auto; }
 .dial { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.dial.volume strong { font-variant-numeric: tabular-nums; }
 .dial strong {
   font-size: 32px;
   letter-spacing: -0.05em;

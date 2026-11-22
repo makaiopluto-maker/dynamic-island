@@ -619,7 +619,7 @@ function SettingsPeek({
         <li>Calendar · {live.calendar.source === "google" ? "today, and new events" : "sample"}</li>
         <li>Photos · {live.connected ? "view and upload" : "this device"}</li>
         <li>Music · YouTube Music search, or Spotify</li>
-        <li>Gemini · {geminiReady == null ? "checking" : geminiReady ? "ready" : "not connected on this copy"}</li>
+        <li>Gemini · {geminiReady == null ? "checking" : geminiReady ? "ready" : "add a key in the app"}</li>
         <li>Radio · news stations</li>
         <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
         <li>Lights · {brightnessSupported ? "this monitor" : "the Windows app on this PC"}</li>

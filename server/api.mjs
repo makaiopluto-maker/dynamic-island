@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { getIdentity } from "../cursor/identity.ts";
 import { dial } from "../shared/radio.mjs";
 import { searchCatalog } from "../shared/youtube.ts";
@@ -553,8 +555,16 @@ function cacheKey(token) {
 const geminiHits = new Map();
 
 function sameOrigin(request) {
+  const page = new URL(request.url).origin;
   const origin = request.headers.get("origin");
-  return Boolean(origin) && origin === new URL(request.url).origin;
+  if (origin) return origin === page;
+  const referer = request.headers.get("referer");
+  if (!referer) return true;
+  try {
+    return new URL(referer).origin === page;
+  } catch {
+    return false;
+  }
 }
 
 function decodeXml(value) {
@@ -921,8 +931,23 @@ async function requirePerson(request) {
   return identity;
 }
 
+function savedGeminiKey() {
+  const file = process.env.ISLAND_GEMINI_FILE;
+  if (!file || process.env.ISLAND_DESKTOP !== "1") return "";
+  try {
+    const key = readFileSync(file, "utf8").trim();
+    return /^AIza[0-9A-Za-z_-]{20,}$/.test(key) ? key : "";
+  } catch {
+    return "";
+  }
+}
+
+function geminiKey() {
+  return process.env.GEMINI_API_KEY?.trim() || savedGeminiKey();
+}
+
 function geminiReady() {
-  return Boolean(process.env.GEMINI_API_KEY?.trim());
+  return Boolean(geminiKey());
 }
 
 async function askGemini(messages) {
@@ -939,7 +964,7 @@ async function askGemini(messages) {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-goog-api-key": process.env.GEMINI_API_KEY.trim(),
+          "x-goog-api-key": geminiKey(),
         },
         body: JSON.stringify({
           systemInstruction: {
@@ -997,7 +1022,20 @@ export async function handleApi(request) {
   const credentials = client();
 
   if (url.pathname === "/api/gemini" && request.method === "GET") {
-    return json({ configured: geminiReady() });
+    return json({ configured: geminiReady(), desktop: process.env.ISLAND_DESKTOP === "1" });
+  }
+
+  if (url.pathname === "/api/gemini/key" && request.method === "POST") {
+    if (process.env.ISLAND_DESKTOP !== "1") return json({ error: "forbidden" }, { status: 403 });
+    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    const file = process.env.ISLAND_GEMINI_FILE;
+    if (!file) return json({ error: "not_configured" }, { status: 404 });
+    const body = await request.json().catch(() => null);
+    const key = typeof body?.key === "string" ? body.key.trim() : "";
+    if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(key)) return json({ error: "bad_request" }, { status: 400 });
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, key, { mode: 0o600 });
+    return json({ configured: true, desktop: true });
   }
 
   if (url.pathname === "/api/gemini" && request.method === "POST") {

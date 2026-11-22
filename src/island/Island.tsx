@@ -118,7 +118,15 @@ export function Island({
         youtube={youtube}
         spotify={spotify}
         source={source}
-        geminiLine={gemini.configured === false ? "웹사이트에서 잠김" : gemini.lastReply ? gemini.lastReply.slice(0, 42) : "In this island"}
+        geminiLine={
+          gemini.desktop === false
+            ? "웹사이트에서 잠김"
+            : gemini.lastReply
+              ? gemini.lastReply.slice(0, 42)
+              : gemini.configured
+                ? "In this island"
+                : "키를 저장하세요"
+        }
         onMusic={onMusic}
         onGemini={() => onOpen("gemini")}
         onRadio={onRadio}

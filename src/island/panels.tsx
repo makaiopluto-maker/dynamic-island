@@ -8,7 +8,8 @@ type Radio = ReturnType<typeof useRadio>;
 
 export function GeminiView({ gemini }: { gemini: Gemini }) {
   const thread = useRef<HTMLDivElement>(null);
-  const locked = gemini.configured !== true;
+  const [key, setKey] = useState("");
+  const locked = gemini.desktop !== true;
   useEffect(() => {
     const node = thread.current;
     if (node) node.scrollTop = node.scrollHeight;
@@ -19,12 +20,19 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
       className="gemini"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!locked) void gemini.send();
+        if (locked || !gemini.configured) return;
+        void gemini.send();
       }}
     >
       <div className="thread" ref={thread}>
         {gemini.turns.length === 0 ? (
-          <p className="fine">{locked ? "Gemini는 이 웹사이트에서 잠겨 있습니다." : "Ask Gemini. The answer stays in this island."}</p>
+          <p className="fine">
+            {locked
+              ? "Gemini는 이 웹사이트에서 잠겨 있습니다."
+              : gemini.configured
+                ? "Ask Gemini. The answer stays in this island."
+                : "앱에서 채팅하려면 Gemini API 키를 한 번 저장하세요."}
+          </p>
         ) : null}
         {gemini.turns.map((turn, index) => (
           <p key={`${turn.role}-${index}`} className={turn.role === "user" ? "bubble user" : "bubble model"}>
@@ -34,18 +42,44 @@ export function GeminiView({ gemini }: { gemini: Gemini }) {
         {gemini.pending ? <p className="fine">Gemini is writing…</p> : null}
         {gemini.error ? <p className="fine">{gemini.error}</p> : null}
       </div>
-      <div className="ask">
-        <input
-          value={gemini.draft}
-          onChange={(event) => gemini.setDraft(event.target.value)}
-          placeholder="Ask Gemini"
-          aria-label="Message Gemini"
-          disabled={locked || gemini.pending}
-        />
-        <button type="submit" className="link-btn" disabled={locked || gemini.pending || !gemini.draft.trim()}>
-          Send
-        </button>
-      </div>
+      {gemini.desktop === true && gemini.configured === false ? (
+        <div className="ask">
+          <input
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+            placeholder="Gemini API 키"
+            aria-label="Gemini API key"
+            type="password"
+            autoComplete="off"
+            disabled={gemini.pending}
+          />
+          <button
+            type="button"
+            className="link-btn"
+            disabled={gemini.pending || !key.trim()}
+            onClick={() => {
+              void gemini.saveKey(key).then((saved) => {
+                if (saved) setKey("");
+              });
+            }}
+          >
+            저장
+          </button>
+        </div>
+      ) : (
+        <div className="ask">
+          <input
+            value={gemini.draft}
+            onChange={(event) => gemini.setDraft(event.target.value)}
+            placeholder="Ask Gemini"
+            aria-label="Message Gemini"
+            disabled={locked || gemini.pending}
+          />
+          <button type="submit" className="link-btn" disabled={locked || gemini.pending || !gemini.draft.trim()}>
+            Send
+          </button>
+        </div>
+      )}
     </form>
   );
 }
@@ -94,6 +128,18 @@ export function RadioView({ radio }: { radio: Radio }) {
           value={radio.mhz}
           aria-label="Frequency"
           onChange={(event) => radio.tuneMhz(Number(event.target.value))}
+        />
+      </label>
+      <label className="dial volume">
+        <strong>{Math.round(radio.volume * 100)}%</strong>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={radio.volume}
+          aria-label="Volume"
+          onChange={(event) => radio.setVolume(Number(event.target.value))}
         />
       </label>
       <div className="skiprow">

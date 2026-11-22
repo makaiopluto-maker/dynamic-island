@@ -201,10 +201,10 @@ function YouTubeMusic({
   const track = youtube.track;
   return (
     <div className="music-stage yt">
+      <div className="yt-engine" ref={frame} aria-hidden="true" />
       <SourceSwitch source={source} onSource={onSource} />
       <div className="now">
         <div className="now-art">
-          <div className="yt-engine" ref={frame} aria-hidden="true" />
           {track ? <img src={`https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`} alt="" /> : <Cover theme="dusk" />}
         </div>
         <div className="now-copy">
