@@ -41,6 +41,7 @@ jobs:
           cp site/icon.png icon.png
           cp site/logo-120.png logo-120.png
           cp site/logo-512.png logo-512.png
+          cp site/google3d3dc20f4a6db0d7.html google3d3dc20f4a6db0d7.html
           cp dist/favicon.svg favicon.svg
           cp index.html 404.html
           touch .nojekyll
@@ -48,7 +49,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A index.html 404.html privacy.html terms.html site.css favicon.svg icon.png logo-120.png logo-512.png app .nojekyll
+          git add -A index.html 404.html privacy.html terms.html site.css favicon.svg icon.png logo-120.png logo-512.png google3d3dc20f4a6db0d7.html app .nojekyll
           if [ -d assets ] || git ls-files --error-unmatch assets >/dev/null 2>&1; then
             git rm -r --cached --ignore-unmatch assets || true
             rm -rf assets
