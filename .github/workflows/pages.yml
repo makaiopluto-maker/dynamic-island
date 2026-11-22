@@ -25,21 +25,32 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          PAGES_BASE: ./
-      - name: Copy the built site to the repository root
+          PAGES_BASE: ./app/
+      - name: Publish landing site and web app demo
         run: |
-          rm -rf assets
-          cp -a dist/assets assets
-          cp dist/index.html index.html
+          rm -rf assets app
+          mkdir -p app
+          cp -a dist/assets app/assets
+          cp dist/index.html app/index.html
+          cp dist/favicon.svg app/favicon.svg
+          cp dist/index.html app/404.html
+          cp site/index.html index.html
+          cp site/privacy.html privacy.html
+          cp site/terms.html terms.html
+          cp site/site.css site.css
           cp dist/favicon.svg favicon.svg
-          cp dist/index.html 404.html
-          cp dist/release.json release.json
+          cp index.html 404.html
           touch .nojekyll
       - name: Commit the pages site
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html 404.html favicon.svg release.json assets .nojekyll
+          git add -A index.html 404.html privacy.html terms.html site.css favicon.svg app .nojekyll
+          if [ -d assets ] || git ls-files --error-unmatch assets >/dev/null 2>&1; then
+            git rm -r --cached --ignore-unmatch assets || true
+            rm -rf assets
+          fi
+          git add -u
           git diff --staged --quiet && exit 0
           git commit -m "Publish the website [skip pages]"
           git push

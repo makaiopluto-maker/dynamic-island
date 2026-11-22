@@ -9,7 +9,13 @@ npm install
 npm run dev
 ```
 
-개발 서버는 [http://127.0.0.1:4731](http://127.0.0.1:4731) 입니다. 공개 페이지는 [https://makaiopluto-maker.github.io/dynamic-island/](https://makaiopluto-maker.github.io/dynamic-island/) 입니다.
+개발 서버는 [http://127.0.0.1:4731](http://127.0.0.1:4731) 입니다.
+
+공개 사이트:
+
+- 홈: [https://makaiopluto-maker.github.io/dynamic-island/](https://makaiopluto-maker.github.io/dynamic-island/)
+- 개인정보처리방침: [https://makaiopluto-maker.github.io/dynamic-island/privacy.html](https://makaiopluto-maker.github.io/dynamic-island/privacy.html)
+- 서비스 약관: [https://makaiopluto-maker.github.io/dynamic-island/terms.html](https://makaiopluto-maker.github.io/dynamic-island/terms.html)
 
 ## 조작
 
