@@ -21,15 +21,29 @@ const SCOPES = [
 
 const cache = new Map();
 
+function savedGoogleClient() {
+  const file = process.env.ISLAND_GOOGLE_FILE;
+  if (!file || process.env.ISLAND_DESKTOP !== "1") return null;
+  try {
+    const raw = JSON.parse(readFileSync(file, "utf8"));
+    const id = typeof raw?.id === "string" ? raw.id.trim() : "";
+    const secret = typeof raw?.secret === "string" ? raw.secret.trim() : "";
+    if (!id || !secret) return null;
+    return { id, secret };
+  } catch {
+    return null;
+  }
+}
+
 export function googleConfigured() {
-  return Boolean(process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim());
+  return Boolean(client());
 }
 
 function client() {
   const id = process.env.GOOGLE_CLIENT_ID?.trim() ?? "";
   const secret = process.env.GOOGLE_CLIENT_SECRET?.trim() ?? "";
-  if (!id || !secret) return null;
-  return { id, secret };
+  if (id && secret) return { id, secret };
+  return savedGoogleClient();
 }
 
 function readCookies(request) {
@@ -192,14 +206,14 @@ async function fetchMail(token) {
   return messages;
 }
 
-async function fetchCalendar(token, now) {
-  const day = seoulDay(now);
+async function fetchCalendar(token, now, ymd) {
+  const day = seoulDay(now, ymd);
   const params = new URLSearchParams({
     timeMin: day.start,
     timeMax: day.end,
     singleEvents: "true",
     orderBy: "startTime",
-    maxResults: "8",
+    maxResults: "12",
   });
   const data = await googleFetch(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
@@ -294,7 +308,7 @@ function minutes(value) {
 }
 
 async function createEvent(token, event) {
-  const day = seoulDay(new Date());
+  const day = seoulDay(new Date(), event.date);
   const data = await googlePost("https://www.googleapis.com/calendar/v3/calendars/primary/events", token, {
     summary: event.title,
     start: { dateTime: `${day.ymd}T${event.start}:00+09:00`, timeZone: "Asia/Seoul" },
@@ -1286,6 +1300,15 @@ export async function handleApi(request) {
     });
   }
 
+  if (url.pathname === "/api/calendar" && request.method === "GET") {
+    if (!credentials) return json({ error: "not_configured" }, { status: 404 });
+    const date = typeof url.searchParams.get("date") === "string" ? url.searchParams.get("date") : "";
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: "bad_request" }, { status: 400 });
+    return withGoogle(cookies, credentials, secure, async (token) =>
+      json({ date: seoulDay(now, date || undefined).ymd, events: await fetchCalendar(token, now, date || undefined) }),
+    );
+  }
+
   if (url.pathname === "/api/calendar" && request.method === "POST") {
     if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
     if (!credentials) return json({ error: "not_configured" }, { status: 404 });
@@ -1294,12 +1317,27 @@ export async function handleApi(request) {
     const title = typeof body?.title === "string" ? body.title.trim().slice(0, 120) : "";
     const start = clock(body?.start);
     const end = clock(body?.end);
+    const date = typeof body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : seoulDay(now).ymd;
     if (!title || !start || !end || minutes(end) <= minutes(start)) return json({ error: "bad_request" }, { status: 400 });
     return withGoogle(cookies, credentials, secure, async (token) => {
-      const event = await createEvent(token, { title, start, end });
+      const event = await createEvent(token, { title, start, end, date });
       cache.delete(cacheKey(token));
       return json({ event });
     });
+  }
+
+  if (url.pathname === "/api/google/setup" && request.method === "POST") {
+    if (!sameOrigin(request)) return json({ error: "forbidden" }, { status: 403 });
+    if (process.env.ISLAND_DESKTOP !== "1") return json({ error: "desktop_only" }, { status: 403 });
+    const file = process.env.ISLAND_GOOGLE_FILE;
+    if (!file) return json({ error: "not_configured" }, { status: 404 });
+    const body = await request.json().catch(() => null);
+    const id = typeof body?.id === "string" ? body.id.trim() : "";
+    const secret = typeof body?.secret === "string" ? body.secret.trim() : "";
+    if (!id || !secret || id.length > 200 || secret.length > 200) return json({ error: "bad_request" }, { status: 400 });
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ id, secret }, null, 2), { mode: 0o600 });
+    return json({ configured: true, desktop: true });
   }
 
   if (url.pathname === "/api/photos/library" && request.method === "GET") {

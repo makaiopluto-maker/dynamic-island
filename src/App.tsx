@@ -232,6 +232,7 @@ declare global {
   interface Window {
     islandDesktop?: {
       setInteractive: (interactive: boolean) => void;
+      connectGoogle?: () => Promise<boolean>;
     };
   }
 }

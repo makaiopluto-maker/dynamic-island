@@ -78,6 +78,7 @@ function startServer(root, port) {
       HOST: "127.0.0.1",
       ISLAND_DESKTOP: "1",
       ISLAND_GEMINI_FILE: join(userData, "gemini-key"),
+      ISLAND_GOOGLE_FILE: join(userData, "google-oauth.json"),
       ISLAND_ROOT: root,
       NODE_ENV: "production",
       PORT: String(port),
@@ -215,6 +216,58 @@ ipcMain.on("island:interactive", (event, interactive) => {
   if (!window) return;
   if (interactive) window.setIgnoreMouseEvents(false);
   else window.setIgnoreMouseEvents(true, { forward: true });
+});
+
+ipcMain.handle("island:google-auth", async (event) => {
+  const parent = BrowserWindow.fromWebContents(event.sender);
+  if (!parent || parent.isDestroyed()) return false;
+  const current = parent.webContents.getURL();
+  const origin = new URL(current).origin;
+  const auth = new BrowserWindow({
+    width: 520,
+    height: 740,
+    parent,
+    modal: false,
+    show: true,
+    title: "Google",
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  });
+  const done = (ok) => {
+    if (!auth.isDestroyed()) auth.close();
+    return ok;
+  };
+  const watch = (url) => {
+    try {
+      const next = new URL(url);
+      if (next.origin !== origin) return null;
+      if (next.searchParams.has("open") || next.searchParams.has("google")) {
+        return !next.searchParams.has("google") || next.searchParams.get("google") !== "error";
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+  return await new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve(done(ok));
+    };
+    auth.on("closed", () => finish(false));
+    const onNav = (_event, url) => {
+      const result = watch(url);
+      if (result != null) finish(result);
+    };
+    auth.webContents.on("will-redirect", onNav);
+    auth.webContents.on("did-navigate", onNav);
+    void auth.loadURL(`${origin}/api/auth/google`);
+  });
 });
 
 const gotLock = app.requestSingleInstanceLock();

@@ -1,30 +1,43 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatWhen, type CalendarEvent, type IslandContact, type IslandPhoto, type IslandWeather, type LiveState, type MailMessage, type useWeather } from "./desk.ts";
 import { seoulFace } from "./format.ts";
+import { connectGoogle } from "./googleConnect.ts";
 import type { PeekId } from "./types.ts";
 import { useGooglePhotos } from "./useGooglePhotos.ts";
 
 function GoogleRow({
   live,
   onDisconnect,
+  onRefresh,
 }: {
   live: LiveState;
   onDisconnect: () => void;
+  onRefresh?: () => void;
 }) {
-  if (!live.ready) return <p className="fine">Checking the account…</p>;
-  if (!live.googleConfigured) return <p className="fine">Google을 연결하면 메일과 일정이 여기에 옵니다.</p>;
+  if (!live.ready) return <p className="fine">계정 확인 중…</p>;
+  if (!live.googleConfigured) {
+    return <p className="fine">설정에서 Google OAuth를 저장하면 메일·캘린더·포토가 연결됩니다.</p>;
+  }
   if (!live.connected) {
     return (
-      <a className="link-btn" href="/api/auth/google">
-        Connect Google
-      </a>
+      <button
+        type="button"
+        className="link-btn"
+        onClick={() => {
+          void connectGoogle().then((ok) => {
+            if (ok) onRefresh?.();
+          });
+        }}
+      >
+        Google 연결
+      </button>
     );
   }
   return (
     <div className="account-row">
       <span>{live.account ?? "Google"}</span>
       <button type="button" className="text-btn" onClick={onDisconnect}>
-        Disconnect
+        연결 해제
       </button>
     </div>
   );
@@ -203,17 +216,43 @@ function MailPeek({
   return (
     <div className="peek stack">
       <div className="peek-head">
-        <h2>{unread > 0 ? `${unread} unread` : "Mail"}</h2>
+        <h2>{unread > 0 ? `안 읽음 ${unread}` : "메일"}</h2>
         <Badge source={live.mail.source} />
       </div>
       <MailList messages={live.mail.messages} error={live.mail.error} openId={openId} onOpen={(id) => void open(id)} />
-      <button type="button" className="link-btn" onClick={() => setPane("write")}>
-        Write
+      <button type="button" className="link-btn" onClick={() => setPane("write")} disabled={!google}>
+        새 메일
       </button>
       {note ? <p className="fine">{note}</p> : null}
-      <GoogleRow live={live} onDisconnect={onDisconnect} />
+      <GoogleRow live={live} onDisconnect={onDisconnect} onRefresh={onRefresh} />
     </div>
   );
+}
+
+function monthMatrix(year: number, month: number) {
+  const first = new Date(Date.UTC(year, month - 1, 1));
+  const startPad = (first.getUTCDay() + 6) % 7;
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const cells: Array<{ ymd: string; day: number; inMonth: boolean }> = [];
+  for (let i = 0; i < startPad; i += 1) {
+    const date = new Date(Date.UTC(year, month - 1, -startPad + i + 1));
+    cells.push({
+      ymd: date.toISOString().slice(0, 10),
+      day: date.getUTCDate(),
+      inMonth: false,
+    });
+  }
+  for (let day = 1; day <= days; day += 1) {
+    const ymd = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    cells.push({ ymd, day, inMonth: true });
+  }
+  while (cells.length % 7 !== 0) {
+    const last = cells.at(-1)!;
+    const date = new Date(`${last.ymd}T12:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + 1);
+    cells.push({ ymd: date.toISOString().slice(0, 10), day: date.getUTCDate(), inMonth: false });
+  }
+  return cells;
 }
 
 function CalendarPeek({
@@ -227,21 +266,61 @@ function CalendarPeek({
   onRefresh: () => void;
   onDisconnect: () => void;
 }) {
-  const face = seoulFace(now, null);
+  const initial = seoulFace(now, null).ymd;
+  const [selected, setSelected] = useState(initial);
+  const [cursor, setCursor] = useState(() => {
+    const [y, m] = initial.split("-").map(Number);
+    return { year: y, month: m };
+  });
+  const [events, setEvents] = useState<CalendarEvent[]>(live.calendar.events);
   const [title, setTitle] = useState("");
   const [start, setStart] = useState("09:00");
   const [end, setEnd] = useState("10:00");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const google = live.calendar.source === "google";
+  const cells = useMemo(() => monthMatrix(cursor.year, cursor.month), [cursor.month, cursor.year]);
+
+  useEffect(() => {
+    if (!google) {
+      setEvents(live.calendar.events);
+      return;
+    }
+    let stop = false;
+    setLoading(true);
+    void fetch(`/api/calendar?date=${encodeURIComponent(selected)}`)
+      .then(async (response) => {
+        const body = (await response.json()) as { events?: CalendarEvent[]; error?: string };
+        if (stop) return;
+        if (response.ok) setEvents(body.events ?? []);
+        else setEvents([]);
+      })
+      .catch(() => {
+        if (!stop) setEvents([]);
+      })
+      .finally(() => {
+        if (!stop) setLoading(false);
+      });
+    return () => {
+      stop = true;
+    };
+  }, [google, live.calendar.events, selected]);
+
+  const shiftMonth = (delta: number) => {
+    setCursor((current) => {
+      const date = new Date(Date.UTC(current.year, current.month - 1 + delta, 1));
+      return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+    });
+  };
 
   const add = async () => {
     if (!google) {
-      setNote("Connect Google to add an event.");
+      setNote("Google을 연결하면 일정을 등록할 수 있습니다.");
       return;
     }
     if (end <= start) {
-      setNote("End has to be after the start.");
+      setNote("종료 시간이 시작보다 뒤여야 합니다.");
       return;
     }
     setSaving(true);
@@ -250,22 +329,23 @@ function CalendarPeek({
       const response = await fetch("/api/calendar", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, start, end }),
+        body: JSON.stringify({ title, start, end, date: selected }),
       });
-      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      const body = (await response.json().catch(() => null)) as { error?: string; event?: CalendarEvent } | null;
       if (response.ok) {
         setTitle("");
-        setNote("Added to today.");
+        setNote("일정을 등록했습니다.");
+        if (body?.event) setEvents((current) => [...current, body.event!]);
         onRefresh();
       } else if (body?.error === "reconnect") {
-        setNote("Connect Google again so this island can add events.");
+        setNote("Google을 다시 연결하세요.");
       } else if (response.status === 429) {
-        setNote("Too many events just now. Wait a minute.");
+        setNote("너무 자주 등록했습니다. 잠시 후 다시 시도하세요.");
       } else {
-        setNote("Couldn’t add that event.");
+        setNote("일정을 등록하지 못했습니다.");
       }
     } catch {
-      setNote("Couldn’t add that event.");
+      setNote("일정을 등록하지 못했습니다.");
     } finally {
       setSaving(false);
     }
@@ -274,10 +354,53 @@ function CalendarPeek({
   return (
     <div className="peek stack">
       <div className="peek-head">
-        <h2>{face.longDate}</h2>
+        <h2>
+          {cursor.year}.{String(cursor.month).padStart(2, "0")}
+        </h2>
         <Badge source={live.calendar.source} />
       </div>
-      <EventList events={live.calendar.events} error={live.calendar.error} />
+      <div className="month-nav">
+        <button type="button" className="text-btn" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+          이전
+        </button>
+        <button type="button" className="text-btn" onClick={() => shiftMonth(1)} aria-label="Next month">
+          다음
+        </button>
+      </div>
+      <div className="month-grid" role="grid" aria-label="Calendar">
+        {["월", "화", "수", "목", "금", "토", "일"].map((label) => (
+          <span key={label} className="month-dow">
+            {label}
+          </span>
+        ))}
+        {cells.map((cell) => (
+          <button
+            key={cell.ymd}
+            type="button"
+            role="gridcell"
+            className={[
+              "month-day",
+              cell.inMonth ? "" : "dim",
+              cell.ymd === selected ? "on" : "",
+              cell.ymd === initial ? "today" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={() => {
+              setSelected(cell.ymd);
+              if (!cell.inMonth) {
+                const [y, m] = cell.ymd.split("-").map(Number);
+                setCursor({ year: y, month: m });
+              }
+              setNote("");
+            }}
+          >
+            {cell.day}
+          </button>
+        ))}
+      </div>
+      <p className="fine">{selected} · {loading ? "일정 불러오는 중…" : "날짜를 눌러 일정을 등록하세요"}</p>
+      <EventList events={events} error={live.calendar.error} />
       <form
         className="composer"
         onSubmit={(event) => {
@@ -286,25 +409,25 @@ function CalendarPeek({
         }}
       >
         <label className="field">
-          Title
-          <input value={title} onChange={(event) => setTitle(event.target.value)} required />
+          제목
+          <input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="일정 제목" />
         </label>
         <div className="when">
           <label className="field">
-            Start
+            시작
             <input type="time" value={start} onChange={(event) => setStart(event.target.value)} required />
           </label>
           <label className="field">
-            End
+            종료
             <input type="time" value={end} onChange={(event) => setEnd(event.target.value)} required />
           </label>
         </div>
-        <button type="submit" className="link-btn" disabled={saving}>
-          {saving ? "Adding…" : "Add to today"}
+        <button type="submit" className="link-btn" disabled={saving || !google}>
+          {saving ? "등록 중…" : `${selected}에 등록`}
         </button>
       </form>
       {note ? <p className="fine">{note}</p> : null}
-      <GoogleRow live={live} onDisconnect={onDisconnect} />
+      <GoogleRow live={live} onDisconnect={onDisconnect} onRefresh={onRefresh} />
     </div>
   );
 }
@@ -375,7 +498,7 @@ export function PeekView({
       <div className="peek stack">
         <div className="peek-head">
           <h2>Photos</h2>
-          <span className={live.connected ? "badge live" : "badge"}>{live.connected ? "Google Photos" : "This device"}</span>
+          <span className={live.connected ? "badge live" : "badge"}>{live.connected ? "Google Photos" : "연결 필요"}</span>
         </div>
         {hasPhotos ? (
           <div className="photo-grid peek-scroll">
@@ -396,14 +519,14 @@ export function PeekView({
         ) : (
           <p className="fine">
             {googlePhotos.error === "reconnect"
-              ? "Connect Google again so Photos can open."
+              ? "Google을 다시 연결하세요."
               : googlePhotos.uploading
-                ? "Uploading to Google Photos…"
+                ? "Google Photos에 올리는 중…"
                 : googlePhotos.picking
-                  ? "Pick the pictures in Google Photos. They land here when you finish."
+                  ? "Google Photos에서 사진을 고르면 여기에 나타납니다."
                   : live.connected
-                    ? "Choose pictures to view, or upload one from this device."
-                    : "Connect Google Photos to view and upload, or keep a picture on this device."}
+                    ? "Google Photos에서 사진을 고르거나, 이 기기에서 업로드하세요."
+                    : "Google을 연결하면 Google Photos와 연동됩니다."}
           </p>
         )}
         <input
@@ -429,26 +552,35 @@ export function PeekView({
                 void googlePhotos.choose(popup);
               }}
             >
-              View in Google Photos
+              Google Photos에서 선택
             </button>
           ) : live.googleConfigured ? (
-            <a className="link-btn" href="/api/auth/google">
-              Connect Google
-            </a>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                void connectGoogle().then((ok) => {
+                  if (ok) onRefresh();
+                });
+              }}
+            >
+              Google Photos 연결
+            </button>
           ) : (
-            <p className="fine">Google을 연결하면 일정이 여기에 옵니다.</p>
+            <p className="fine">설정에서 Google OAuth를 저장한 뒤 연결하세요.</p>
           )}
           {googlePhotos.error === "reconnect" ? (
-            <a className="text-btn" href="/api/auth/google">
-              Connect again
-            </a>
+            <button type="button" className="text-btn" onClick={() => void connectGoogle().then((ok) => ok && onRefresh())}>
+              다시 연결
+            </button>
           ) : null}
-          <button type="button" className="text-btn" onClick={() => fileRef.current?.click()} disabled={googlePhotos.uploading}>
-            {live.connected ? "Upload to Google Photos" : "Add from this device"}
+          <button type="button" className="text-btn" onClick={() => fileRef.current?.click()} disabled={googlePhotos.uploading || !live.connected}>
+            {live.connected ? "이 기기에서 업로드" : "연결 후 업로드"}
           </button>
         </div>
-        {googlePhotos.uploading ? <p className="fine">Uploading to Google Photos…</p> : null}
-        {googlePhotos.error === "unreachable" ? <p className="fine">Google Photos didn’t take that picture.</p> : null}
+        {googlePhotos.uploading ? <p className="fine">Google Photos에 올리는 중…</p> : null}
+        {googlePhotos.error === "unreachable" ? <p className="fine">사진을 가져오지 못했습니다.</p> : null}
+        <GoogleRow live={live} onDisconnect={onDisconnect} onRefresh={onRefresh} />
       </div>
     );
   }
@@ -498,6 +630,7 @@ export function PeekView({
         brightnessSupported={brightness.supported}
         contactsSupported={contactsSupported}
         onDisconnect={onDisconnect}
+        onRefresh={onRefresh}
       />
     );
   }
@@ -558,14 +691,46 @@ function SettingsPeek({
   brightnessSupported,
   contactsSupported,
   onDisconnect,
+  onRefresh,
 }: {
   live: LiveState;
   geminiReady: boolean | null;
   brightnessSupported: boolean;
   contactsSupported: boolean;
   onDisconnect: () => void;
+  onRefresh: () => void;
 }) {
   const alerts = useAlertPermission();
+  const desktop = Boolean(window.islandDesktop);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [setupNote, setSetupNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const saveGoogle = async () => {
+    setSaving(true);
+    setSetupNote("");
+    try {
+      const response = await fetch("/api/google/setup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: clientId, secret: clientSecret }),
+      });
+      if (!response.ok) {
+        setSetupNote("이 PC 설치본에서만 Google OAuth를 저장할 수 있습니다.");
+        return;
+      }
+      setClientId("");
+      setClientSecret("");
+      setSetupNote("저장했습니다. 이제 Google을 연결하세요.");
+      onRefresh();
+    } catch {
+      setSetupNote("저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="peek stack">
       <div className="peek-head">
@@ -577,31 +742,62 @@ function SettingsPeek({
           <strong>Google</strong>
           <em>
             {live.connected
-              ? (live.account ?? "Connected")
+              ? (live.account ?? "연결됨")
               : live.googleConfigured
-                ? "Mail, calendar, photos, and your library"
-                : "YouTube Music plays from search"}
+                ? "메일 · 캘린더 · Google Photos"
+                : desktop
+                  ? "OAuth 클라이언트 ID/Secret 저장 필요"
+                  : "배포 환경의 Google 비밀값이 필요합니다"}
           </em>
         </span>
         {!live.ready ? (
           <span className="badge">…</span>
         ) : !live.googleConfigured ? (
-          <span className="badge">Search</span>
+          <span className="badge">설정</span>
         ) : live.connected ? (
           <span className="setting-actions">
-            <a className="text-btn" href="/api/auth/google">
-              Connect again
-            </a>
+            <button type="button" className="text-btn" onClick={() => void connectGoogle().then((ok) => ok && onRefresh())}>
+              다시 연결
+            </button>
             <button type="button" className="text-btn" onClick={onDisconnect}>
-              Disconnect
+              연결 해제
             </button>
           </span>
         ) : (
-          <a className="link-btn" href="/api/auth/google">
-            Connect
-          </a>
+          <button type="button" className="link-btn" onClick={() => void connectGoogle().then((ok) => ok && onRefresh())}>
+            연결
+          </button>
         )}
       </div>
+      {!live.googleConfigured && desktop ? (
+        <form
+          className="composer"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveGoogle();
+          }}
+        >
+          <label className="field">
+            Client ID
+            <input value={clientId} onChange={(event) => setClientId(event.target.value)} required autoComplete="off" />
+          </label>
+          <label className="field">
+            Client Secret
+            <input
+              value={clientSecret}
+              onChange={(event) => setClientSecret(event.target.value)}
+              required
+              type="password"
+              autoComplete="off"
+            />
+          </label>
+          <button type="submit" className="link-btn" disabled={saving}>
+            {saving ? "저장 중…" : "Google OAuth 저장"}
+          </button>
+          <p className="fine">Google Cloud Console 웹 클라이언트 · 리디렉션 URI에 http://127.0.0.1:포트/api/auth/google/callback 추가</p>
+          {setupNote ? <p className="fine">{setupNote}</p> : null}
+        </form>
+      ) : null}
       <div className="setting">
         <span>
           <strong>Alerts</strong>
@@ -615,10 +811,10 @@ function SettingsPeek({
       </div>
       <ul className="peek-scroll rows plain">
         <li>Weather · Seoul</li>
-        <li>Mail · {live.mail.source === "google" ? "read and send" : "connect Google"}</li>
-        <li>Calendar · {live.calendar.source === "google" ? "today, and new events" : "connect Google"}</li>
-        <li>Photos · {live.connected ? "view and upload" : "this device"}</li>
-        <li>Music · YouTube Music search, or Spotify</li>
+        <li>Mail · {live.mail.source === "google" ? "실제 주고받기" : "Google 연결 필요"}</li>
+        <li>Calendar · {live.calendar.source === "google" ? "날짜 클릭으로 등록" : "Google 연결 필요"}</li>
+        <li>Photos · {live.connected ? "Google Photos" : "Google 연결 필요"}</li>
+        <li>Music · YouTube Music / Spotify</li>
         <li>AI · {geminiReady == null ? "준비 중" : geminiReady ? "ready" : "다시 열어주세요"}</li>
         <li>Radio · news stations</li>
         <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>

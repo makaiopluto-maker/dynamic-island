@@ -1,16 +1,19 @@
 const SEOUL = "Asia/Seoul";
 
-export function seoulDay(now) {
-  const ymd = new Intl.DateTimeFormat("en-CA", {
-    timeZone: SEOUL,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
+export function seoulDay(now, ymd) {
+  const day =
+    typeof ymd === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ymd)
+      ? ymd
+      : new Intl.DateTimeFormat("en-CA", {
+          timeZone: SEOUL,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(now);
   return {
-    ymd,
-    start: `${ymd}T00:00:00+09:00`,
-    end: `${ymd}T23:59:59+09:00`,
+    ymd: day,
+    start: `${day}T00:00:00+09:00`,
+    end: `${day}T23:59:59+09:00`,
   };
 }
 

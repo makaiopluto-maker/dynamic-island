@@ -28,6 +28,12 @@ export function seoulFace(now: Date, celsius?: number | null) {
   return {
     dateLine: `${weekday} ${day} ${month} / ${celsius == null ? "…" : `${celsius}°`}`,
     timeLine: `${hour}:${minute} ${dayPeriod}`,
+    ymd: new Intl.DateTimeFormat("en-CA", {
+      timeZone: SEOUL,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now),
     longDate: new Intl.DateTimeFormat("en-US", {
       timeZone: SEOUL,
       weekday: "long",
