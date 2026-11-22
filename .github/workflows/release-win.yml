@@ -26,17 +26,25 @@ jobs:
       - name: Install NSIS
         shell: bash
         run: choco install nsis -y
-      - name: Seed Google and Gemini for the installer
+      - name: Seed Google for the installer
         shell: bash
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: node electron/seed-google.mjs
+        run: |
+          node electron/seed-google.mjs
+          if [ ! -f desktop/google-oauth.seed.json ]; then
+            echo "Missing desktop/google-oauth.seed.json — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET repository secrets."
+            exit 1
+          fi
       - name: Build Windows installer
         shell: bash
         env:
           PATH: /c/Program Files (x86)/NSIS:${{ env.PATH }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: npm run dist:win
       - name: Read version
         id: meta
@@ -51,6 +59,7 @@ jobs:
         with:
           tag_name: v${{ steps.meta.outputs.version }}
           name: Dynamic Island ${{ steps.meta.outputs.version }}
+          body: Google login is baked into the installer. After install, use Google로 로그인 — no Settings Client ID/Secret step.
           files: release/Dynamic-Island-Setup.exe
           generate_release_notes: true
           fail_on_unmatched_files: true
