@@ -56,24 +56,12 @@ a {
   letter-spacing: -0.03em;
 }
 
-.brand-mark {
-  width: 1.7rem;
-  height: 0.72rem;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #111, #2a2a2a);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 8px 24px rgba(0, 0, 0, 0.35);
-  position: relative;
-}
-
-.brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 35% 42%;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 12px rgba(255, 122, 47, 0.7);
+.brand-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.45rem;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .nav {
