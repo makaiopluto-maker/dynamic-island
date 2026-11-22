@@ -6,7 +6,7 @@ declare const __ISLAND_VERSION__: string;
 const seenKey = "island-seen-version";
 const dismissKey = "island-update-dismissed";
 const installerUrl = "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe";
-const installerBytes = 96_196_825;
+const installerBytes = 96_236_019;
 
 type Release = {
   version: string;

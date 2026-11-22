@@ -1,8 +1,8 @@
 {
-  "version": "0.3.0",
-  "notes": "The island stays on top of the desktop.",
+  "version": "1.0.0",
+  "notes": "Gemini chat with a saved API key, news radio with volume, built-in YouTube Music player.",
   "download": false,
-  "bytes": 96196825,
-  "latest": "0.3.0",
+  "bytes": 96236019,
+  "latest": "1.0.0",
   "downloadUrl": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe"
 }

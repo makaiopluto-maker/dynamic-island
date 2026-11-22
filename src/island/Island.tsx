@@ -119,13 +119,11 @@ export function Island({
         spotify={spotify}
         source={source}
         geminiLine={
-          gemini.desktop === false
-            ? "웹사이트에서 잠김"
-            : gemini.lastReply
-              ? gemini.lastReply.slice(0, 42)
-              : gemini.configured
-                ? "In this island"
-                : "키를 저장하세요"
+          gemini.lastReply
+            ? gemini.lastReply.slice(0, 42)
+            : gemini.configured
+              ? "무엇이든 물어보세요"
+              : "키를 저장하세요"
         }
         onMusic={onMusic}
         onGemini={() => onOpen("gemini")}
