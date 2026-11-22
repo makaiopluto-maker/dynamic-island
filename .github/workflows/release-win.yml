@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   windows:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,10 +24,8 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install NSIS
-        shell: bash
-        run: choco install nsis -y
+        run: sudo apt-get update && sudo apt-get install -y nsis
       - name: Seed Google for the installer
-        shell: bash
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
@@ -39,16 +37,13 @@ jobs:
             exit 1
           fi
       - name: Build Windows installer
-        shell: bash
         env:
-          PATH: /c/Program Files (x86)/NSIS:${{ env.PATH }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: npm run dist:win
       - name: Read version
         id: meta
-        shell: bash
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
