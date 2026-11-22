@@ -47,7 +47,8 @@ const server = createServer(async (req, res) => {
     }
     res.setHeader("content-type", types[extname(file)] ?? "application/octet-stream");
     createReadStream(file).pipe(res);
-  } catch {
+  } catch (error) {
+    console.error("[island]", error);
     res.statusCode = 500;
     res.end("Island server failed");
   }

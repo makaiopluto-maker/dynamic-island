@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Cover } from "./Cover.tsx";
 import { formatElapsed, formatRemaining } from "./format.ts";
+import { connectGoogle } from "./googleConnect.ts";
 import { NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
 import type { Compact } from "./types.ts";
 import type { LiveState } from "./desk.ts";
@@ -168,15 +169,17 @@ export function MusicView({
   source,
   onSource,
   live,
+  onRefresh,
 }: {
   youtube: YouTube;
   spotify: Spotify;
   source: MusicSource;
   onSource: (source: MusicSource) => void;
   live: LiveState;
+  onRefresh: () => void;
 }) {
   if (source === "spotify") return <SpotifyMusic spotify={spotify} source={source} onSource={onSource} />;
-  return <YouTubeMusic youtube={youtube} source={source} onSource={onSource} live={live} />;
+  return <YouTubeMusic youtube={youtube} source={source} onSource={onSource} live={live} onRefresh={onRefresh} />;
 }
 
 function YouTubeMusic({
@@ -184,11 +187,13 @@ function YouTubeMusic({
   source,
   onSource,
   live,
+  onRefresh,
 }: {
   youtube: YouTube;
   source: MusicSource;
   onSource: (source: MusicSource) => void;
   live: LiveState;
+  onRefresh: () => void;
 }) {
   const length = Math.max(youtube.duration, 1);
   const progress = (youtube.position / length) * 100;
@@ -196,6 +201,27 @@ function YouTubeMusic({
   return (
     <div className="music-stage yt">
       <SourceSwitch source={source} onSource={onSource} />
+      {!live.connected ? (
+        <div className="account-row">
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              void connectGoogle().then((ok) => {
+                if (ok) onRefresh();
+              });
+            }}
+          >
+            YouTube Music 로그인
+          </button>
+          <p className="fine">로그인하면 좋아요 · 플레이리스트 · For you 추천이 옵니다.</p>
+        </div>
+      ) : (
+        <div className="account-row">
+          <span className="badge live">Google</span>
+          <p className="music-meta">{live.account ?? "연결됨"} · 알고리즘 · 라이브러리</p>
+        </div>
+      )}
       <div className="now">
         <div className="now-art">
           {track ? <img src={`https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`} alt="" /> : <Cover theme="dusk" />}
@@ -244,10 +270,10 @@ function YouTubeMusic({
           onChange={(event) => youtube.setVolume(Number(event.target.value))}
         />
       </label>
-      {youtube.error === "reconnect" && live.googleConfigured ? (
-        <a className="text-btn" href="/api/auth/google">
+      {youtube.error === "reconnect" ? (
+        <button type="button" className="text-btn" onClick={() => void connectGoogle().then((ok) => ok && onRefresh())}>
           라이브러리를 보려면 다시 연결
-        </a>
+        </button>
       ) : youtube.error === "blocked" ? (
         <p className="fine">이 곡은 여기서 재생되지 않습니다. 다른 곡을 고르세요.</p>
       ) : youtube.error === "unreachable" ? (

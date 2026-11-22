@@ -453,12 +453,9 @@ export function PeekView({
   live,
   weather,
   photos,
-  contacts,
-  contactsSupported,
   brightness,
   onBrightness,
   onAddPhotos,
-  onPickContacts,
   onDisconnect,
   onRefresh,
   onOpenPeek,
@@ -469,12 +466,12 @@ export function PeekView({
   live: LiveState;
   weather: ReturnType<typeof useWeather>;
   photos: IslandPhoto[];
-  contacts: IslandContact[];
-  contactsSupported: boolean;
+  contacts?: IslandContact[];
+  contactsSupported?: boolean;
   brightness: { level: number | null; supported: boolean };
   onBrightness: (level: number) => void;
   onAddPhotos: (files: FileList | null) => void;
-  onPickContacts: () => void;
+  onPickContacts?: () => void;
   onDisconnect: () => void;
   onRefresh: () => void;
   onOpenPeek: (id: PeekId) => void;
@@ -553,19 +550,7 @@ export function PeekView({
             >
               Google Photos에서 선택
             </button>
-          ) : (
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => {
-                void connectGoogle().then((ok) => {
-                  if (ok) onRefresh();
-                });
-              }}
-            >
-              Google로 로그인
-            </button>
-          )}
+          ) : null}
           {googlePhotos.error === "reconnect" ? (
             <button type="button" className="text-btn" onClick={() => void connectGoogle().then((ok) => ok && onRefresh())}>
               다시 연결
@@ -578,41 +563,6 @@ export function PeekView({
         {googlePhotos.uploading ? <p className="fine">Google Photos에 올리는 중…</p> : null}
         {googlePhotos.error === "unreachable" ? <p className="fine">사진을 가져오지 못했습니다.</p> : null}
         <GoogleRow live={live} onDisconnect={onDisconnect} onRefresh={onRefresh} />
-      </div>
-    );
-  }
-
-  if (id === "phone") {
-    return (
-      <div className="peek stack">
-        <div className="peek-head">
-          <h2>Phone</h2>
-          <span className="badge live">{contactsSupported ? "Contacts" : "Unavailable"}</span>
-        </div>
-        {contacts.length ? (
-          <ul className="peek-scroll rows">
-            {contacts.map((contact) => (
-              <li key={contact.tel} className="row">
-                <i className="dot on" />
-                <span>
-                  <strong>{contact.name}</strong>
-                  <a href={`tel:${contact.tel}`}>{contact.tel}</a>
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="fine">
-            {contactsSupported
-              ? "No contacts on the island yet."
-              : "This browser can’t read the phone. Contacts open in Chrome on Android."}
-          </p>
-        )}
-        {contactsSupported ? (
-          <button type="button" className="link-btn" onClick={() => void onPickContacts()}>
-            Choose contacts
-          </button>
-        ) : null}
       </div>
     );
   }
@@ -636,7 +586,6 @@ export function PeekView({
         live={live}
         geminiReady={geminiReady}
         brightnessSupported={brightness.supported}
-        contactsSupported={contactsSupported}
         onDisconnect={onDisconnect}
         onRefresh={onRefresh}
       />
@@ -697,18 +646,45 @@ function SettingsPeek({
   live,
   geminiReady,
   brightnessSupported,
-  contactsSupported,
   onDisconnect,
   onRefresh,
 }: {
   live: LiveState;
   geminiReady: boolean | null;
   brightnessSupported: boolean;
-  contactsSupported: boolean;
   onDisconnect: () => void;
   onRefresh: () => void;
 }) {
   const alerts = useAlertPermission();
+  const desktop = Boolean(window.islandDesktop);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [setupNote, setSetupNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const saveGoogle = async () => {
+    setSaving(true);
+    setSetupNote("");
+    try {
+      const response = await fetch("/api/google/setup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: clientId, secret: clientSecret }),
+      });
+      if (!response.ok) {
+        setSetupNote("이 PC 설치본에서만 Google OAuth를 저장할 수 있습니다.");
+        return;
+      }
+      setClientId("");
+      setClientSecret("");
+      setSetupNote("저장했습니다. 이제 Google로 로그인하세요.");
+      onRefresh();
+    } catch {
+      setSetupNote("저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="peek stack">
@@ -719,7 +695,15 @@ function SettingsPeek({
       <div className="setting">
         <span>
           <strong>Google</strong>
-          <em>{live.connected ? (live.account ?? "연결됨") : "메일 · 캘린더 · Google Photos"}</em>
+          <em>
+            {live.connected
+              ? (live.account ?? "연결됨")
+              : live.googleConfigured
+                ? "메일 · 캘린더 · Google Photos · YouTube"
+                : desktop
+                  ? "아래 Client ID/Secret을 한 번 저장한 뒤 로그인"
+                  : "배포 환경의 Google 비밀값이 필요합니다"}
+          </em>
         </span>
         {!live.ready ? (
           <span className="badge">…</span>
@@ -732,12 +716,43 @@ function SettingsPeek({
               연결 해제
             </button>
           </span>
-        ) : (
+        ) : live.googleConfigured ? (
           <button type="button" className="link-btn" onClick={() => void connectGoogle().then((ok) => ok && onRefresh())}>
             Google로 로그인
           </button>
+        ) : (
+          <span className="badge">설정</span>
         )}
       </div>
+      {!live.googleConfigured && desktop ? (
+        <form
+          className="composer"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveGoogle();
+          }}
+        >
+          <label className="field">
+            Client ID
+            <input value={clientId} onChange={(event) => setClientId(event.target.value)} required autoComplete="off" />
+          </label>
+          <label className="field">
+            Client Secret
+            <input
+              value={clientSecret}
+              onChange={(event) => setClientSecret(event.target.value)}
+              required
+              type="password"
+              autoComplete="off"
+            />
+          </label>
+          <button type="submit" className="link-btn" disabled={saving}>
+            {saving ? "저장 중…" : "Google OAuth 저장"}
+          </button>
+          <p className="fine">Google Cloud 웹 클라이언트 · 리디렉션 URI에 http://127.0.0.1:포트/api/auth/google/callback</p>
+          {setupNote ? <p className="fine">{setupNote}</p> : null}
+        </form>
+      ) : null}
       <div className="setting">
         <span>
           <strong>Alerts</strong>
@@ -755,9 +770,8 @@ function SettingsPeek({
         <li>Calendar · {live.calendar.source === "google" ? "날짜 클릭으로 등록" : "Google 연결 필요"}</li>
         <li>Photos · {live.connected ? "Google Photos" : "Google 연결 필요"}</li>
         <li>Music · YouTube Music / Spotify</li>
-        <li>AI · {geminiReady == null ? "준비 중" : geminiReady ? "ready" : "다시 열어주세요"}</li>
+        <li>AI · OpenClaw · {geminiReady == null ? "확인 중" : geminiReady ? "ready" : "Gateway 필요"}</li>
         <li>Radio · news stations</li>
-        <li>Phone · {contactsSupported ? "contacts" : "not in this browser"}</li>
         <li>Lights · {brightnessSupported ? "this monitor" : "the Windows app on this PC"}</li>
       </ul>
     </div>

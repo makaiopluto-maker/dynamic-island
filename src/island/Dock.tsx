@@ -5,7 +5,6 @@ import {
   MailIcon,
   MoonIcon,
   NoteIcon,
-  PhoneIcon,
   PhotoIcon,
   PlusIcon,
   RadioIcon,
@@ -16,7 +15,7 @@ import type { PeekId, View } from "./types.ts";
 type DockItem = {
   id: string;
   label: string;
-  icon: "plus" | "home" | "gemini" | "music" | "radio" | "weather" | "moon" | "phone" | "photos" | "calendar" | "mail";
+  icon: "plus" | "home" | "gemini" | "music" | "radio" | "weather" | "moon" | "photos" | "calendar" | "mail";
 };
 
 const items: DockItem[] = [
@@ -27,7 +26,6 @@ const items: DockItem[] = [
   { id: "radio", label: "Radio", icon: "radio" },
   { id: "weather", label: "Weather", icon: "weather" },
   { id: "moon", label: "Lights", icon: "moon" },
-  { id: "phone", label: "Phone", icon: "phone" },
   { id: "photos", label: "Photos", icon: "photos" },
   { id: "calendar", label: "Calendar", icon: "calendar" },
   { id: "mail", label: "Mail", icon: "mail" },
@@ -42,7 +40,6 @@ const icons = {
   radio: RadioIcon,
   weather: WeatherIcon,
   moon: MoonIcon,
-  phone: PhoneIcon,
   photos: PhotoIcon,
   calendar: CalendarIcon,
   mail: MailIcon,

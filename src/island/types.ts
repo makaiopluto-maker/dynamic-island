@@ -4,7 +4,6 @@ export type PeekId =
   | "plus"
   | "weather"
   | "moon"
-  | "phone"
   | "photos"
   | "calendar"
   | "mail";

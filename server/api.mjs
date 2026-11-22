@@ -638,21 +638,33 @@ async function youtubePlaylistTracks(token, id) {
   return (data.items ?? []).map((item) => ytTrack(item.contentDetails?.videoId, item.snippet)).filter(Boolean);
 }
 
+async function youtubePopular(token) {
+  const params = new URLSearchParams({
+    part: "snippet",
+    chart: "mostPopular",
+    videoCategoryId: "10",
+    regionCode: "KR",
+    maxResults: "12",
+  });
+  const data = await googleFetch(`https://www.googleapis.com/youtube/v3/videos?${params}`, token);
+  return (data.items ?? []).map((item) => ytTrack(item.id, item.snippet)).filter(Boolean);
+}
+
 async function youtubeLibrary(token) {
-  const [listsResult, channelResult] = await Promise.allSettled([
+  const [listsResult, channelResult, popularResult] = await Promise.allSettled([
     googleFetch(
       "https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&mine=true&maxResults=6",
       token,
     ),
     googleFetch("https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true", token),
+    youtubePopular(token),
   ]);
-  const denied = [listsResult, channelResult].find(
-    (result) => result.status === "rejected" && (result.reason?.status === 401 || result.reason?.status === 403),
-  );
   if (listsResult.status === "rejected" && (listsResult.reason?.status === 401 || listsResult.reason?.status === 403)) {
     throw listsResult.reason;
   }
-  if (denied && listsResult.status === "rejected") throw denied.reason;
+  if (channelResult.status === "rejected" && (channelResult.reason?.status === 401 || channelResult.reason?.status === 403)) {
+    throw channelResult.reason;
+  }
   const playlists = listsResult.status === "fulfilled"
     ? (listsResult.value.items ?? [])
         .map((item) => {
@@ -670,8 +682,9 @@ async function youtubeLibrary(token) {
     ? playlistId(channelResult.value.items?.[0]?.contentDetails?.relatedPlaylists?.likes)
     : null;
   const rows = likes ? [{ id: likes, title: "Liked", count: 0 }, ...playlists.filter((item) => item.id !== likes)] : playlists;
-  const first = rows[0];
+  const popular = popularResult.status === "fulfilled" ? popularResult.value : [];
   let tracks = [];
+  const first = rows[0];
   if (first) {
     try {
       tracks = await youtubePlaylistTracks(token, first.id);
@@ -680,7 +693,19 @@ async function youtubeLibrary(token) {
       tracks = [];
     }
   }
-  return { playlists: rows.slice(0, 6), tracks };
+  if (!tracks.length && popular.length) tracks = popular;
+  else if (popular.length) {
+    const seen = new Set(tracks.map((track) => track.id));
+    for (const track of popular) {
+      if (seen.has(track.id)) continue;
+      tracks.push(track);
+      if (tracks.length >= 16) break;
+    }
+  }
+  return {
+    playlists: [{ id: "popular", title: "For you · KR", count: popular.length }, ...rows].slice(0, 7),
+    tracks,
+  };
 }
 
 const youtubeHits = new Map();
@@ -1108,18 +1133,72 @@ function cleanMessages(body) {
   return messages;
 }
 
+function authHtml(title, body) {
+  return new Response(
+    `<!doctype html><meta charset="utf-8"><title>${title}</title><body style="font:14px/1.45 system-ui;padding:24px">${body}</body>`,
+    { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store" } },
+  );
+}
+
 export async function handleApi(request) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/")) return null;
   if (url.pathname === "/api/release" && request.method === "GET") {
     return json(await releaseStatus(), { cache: "no-store" });
   }
+
+  const secureEarly = secureRequest(request);
+  const cookiesEarly = readCookies(request);
+  const credentialsEarly = client();
+
+  // Google OAuth must work without Cursor identity (callback comes from Google).
+  if (url.pathname === "/api/auth/google" && request.method === "GET") {
+    if (!credentialsEarly) {
+      return authHtml(
+        "Google",
+        "<p>Google OAuth가 아직 준비되지 않았습니다.</p><p>Settings에서 Client ID/Secret을 저장한 뒤 다시 로그인하세요.</p>",
+      );
+    }
+    const state = randomBytes(16).toString("hex");
+    const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    auth.searchParams.set("client_id", credentialsEarly.id);
+    auth.searchParams.set("redirect_uri", callbackUrl(request));
+    auth.searchParams.set("response_type", "code");
+    auth.searchParams.set("scope", SCOPES);
+    auth.searchParams.set("access_type", "offline");
+    auth.searchParams.set("prompt", "consent");
+    auth.searchParams.set("include_granted_scopes", "true");
+    auth.searchParams.set("state", state);
+    return redirect(auth.toString(), [setCookie("gi_state", state, { maxAge: 600, secure: secureEarly })]);
+  }
+
+  if (url.pathname === "/api/auth/google/callback" && request.method === "GET") {
+    if (!credentialsEarly) return redirect("/?google=error", cleared(secureEarly));
+    const state = url.searchParams.get("state");
+    const code = url.searchParams.get("code");
+    if (!state || state !== cookiesEarly.gi_state || !code) {
+      return redirect("/?google=error", [clearCookie("gi_state", secureEarly)]);
+    }
+    try {
+      const tokens = await exchange({
+        code,
+        client_id: credentialsEarly.id,
+        client_secret: credentialsEarly.secret,
+        redirect_uri: callbackUrl(request),
+        grant_type: "authorization_code",
+      });
+      return redirect("/?open=mail", [clearCookie("gi_state", secureEarly), ...tokenCookies(tokens, secureEarly)]);
+    } catch {
+      return redirect("/?google=error", cleared(secureEarly));
+    }
+  }
+
   const viewer = await requirePerson(request);
   if (viewer instanceof Response) return viewer;
   const now = new Date();
-  const secure = secureRequest(request);
-  const cookies = readCookies(request);
-  const credentials = client();
+  const secure = secureEarly;
+  const cookies = cookiesEarly;
+  const credentials = credentialsEarly;
 
   if (url.pathname === "/api/openclaw" && request.method === "GET") {
     const token = openClawToken(request);
@@ -1428,45 +1507,6 @@ export async function handleApi(request) {
     } catch (error) {
       if (error?.status === 401 || error?.status === 403) return json({ error: "reconnect" }, { status: 401 });
       return json({ error: "unreachable" }, { status: 502 });
-    }
-  }
-
-  if (url.pathname === "/api/auth/google" && request.method === "GET") {
-    if (!credentials) return redirect("/?google=setup");
-    const state = randomBytes(16).toString("hex");
-    const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    auth.searchParams.set("client_id", credentials.id);
-    auth.searchParams.set("redirect_uri", callbackUrl(request));
-    auth.searchParams.set("response_type", "code");
-    auth.searchParams.set("scope", SCOPES);
-    auth.searchParams.set("access_type", "offline");
-    auth.searchParams.set("prompt", "consent");
-    auth.searchParams.set("include_granted_scopes", "true");
-    auth.searchParams.set("state", state);
-    return redirect(auth.toString(), [setCookie("gi_state", state, { maxAge: 600, secure })]);
-  }
-
-  if (url.pathname === "/api/auth/google/callback" && request.method === "GET") {
-    if (!credentials) return redirect("/?google=error", cleared(secure));
-    const state = url.searchParams.get("state");
-    const code = url.searchParams.get("code");
-    if (!state || state !== cookies.gi_state || !code) {
-      return redirect("/?google=error", [clearCookie("gi_state", secure)]);
-    }
-    try {
-      const tokens = await exchange({
-        code,
-        client_id: credentials.id,
-        client_secret: credentials.secret,
-        redirect_uri: callbackUrl(request),
-        grant_type: "authorization_code",
-      });
-      return redirect("/?open=mail", [
-        clearCookie("gi_state", secure),
-        ...tokenCookies(tokens, secure),
-      ]);
-    } catch {
-      return redirect("/?google=error", cleared(secure));
     }
   }
 

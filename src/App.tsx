@@ -6,7 +6,7 @@ import { mastHeight } from "./island/format.ts";
 import type { Compact, PeekId, View } from "./island/types.ts";
 import { useMusic, useNow, useViewport } from "./island/useActivities.ts";
 import { useBrightness } from "./island/useBrightness.ts";
-import { useLocalAi } from "./island/useLocalAi.ts";
+import { useOpenClaw } from "./island/useOpenClaw.ts";
 import { useRadio } from "./island/useRadio.ts";
 import { useMusicSource, useSpotify } from "./island/useSpotify.ts";
 import { useYouTube } from "./island/useYouTube.ts";
@@ -27,8 +27,7 @@ export default function App() {
   const overlay = new URLSearchParams(window.location.search).get("overlay") === "1";
   const [view, setView] = useState<View>(() => (opened === "mail" ? "peek" : "idle"));
   const [peek, setPeek] = useState<PeekId>(() => (opened === "mail" ? "mail" : "plus"));
-  const [aiNeeded, setAiNeeded] = useState(false);
-  const gemini = useLocalAi(aiNeeded);
+  const gemini = useOpenClaw();
   const weather = useWeather();
   const { photos, add: addPhotos } = usePhotos();
   const { contacts, pick: pickContacts } = useContacts();
@@ -71,10 +70,6 @@ export default function App() {
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
   }, [overlay]);
-
-  useEffect(() => {
-    if (view === "gemini" || view === "home") setAiNeeded(true);
-  }, [view]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

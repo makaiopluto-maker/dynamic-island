@@ -1,6 +1,6 @@
 {
-  "version": "1.4.2",
-  "notes": "Fix YouTube Music default volume (was stuck at 0%).",
+  "version": "1.5.0",
+  "notes": "OpenClaw AI again. YouTube Music login + For you feed. Fix Photos double login and Google auth Island server failed.",
   "download": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe",
-  "bytes": 96245539
+  "bytes": 96235795
 }

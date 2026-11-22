@@ -1,97 +1,86 @@
 import { useEffect, useRef, useState } from "react";
 import { NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
-import type { useLocalAi } from "./useLocalAi.ts";
+import type { useOpenClaw } from "./useOpenClaw.ts";
 import type { Station, useRadio } from "./useRadio.ts";
 
-type LocalAi = ReturnType<typeof useLocalAi>;
+type OpenClaw = ReturnType<typeof useOpenClaw>;
 type Radio = ReturnType<typeof useRadio>;
 
-export function GeminiView({ gemini }: { gemini: LocalAi }) {
+function openClawHint(status: OpenClaw["status"]) {
+  if (status === "checking") return "OpenClaw Gateway를 확인하는 중…";
+  if (status === "offline") {
+    return "PC에 OpenClaw를 설치하고 Gateway를 켠 뒤 다시 시도하세요. powershell -c \"irm https://openclaw.ai/install.ps1 | iex\"";
+  }
+  if (status === "disabled") {
+    return "~/.openclaw/openclaw.json 에서 gateway.http.endpoints.chatCompletions.enabled 를 true 로 켠 다음 Gateway를 재시작하세요.";
+  }
+  if (status === "need_token") {
+    return "OpenClaw Gateway 토큰이 필요하면 아래에 한 번 저장하세요. 없으면 바로 연결을 다시 확인합니다.";
+  }
+  return "무엇이든 물어보세요. 답은 OpenClaw를 통해 이 PC에서만 이어집니다.";
+}
+
+export function GeminiView({ gemini }: { gemini: OpenClaw }) {
   const thread = useRef<HTMLDivElement>(null);
-  const [key, setKey] = useState("");
-  const loading = gemini.status === "loading";
-  const needsKey = gemini.status === "need_key";
+  const [token, setToken] = useState("");
+  const needsSetup = gemini.status !== "ready" && gemini.status !== "checking";
   useEffect(() => {
     const node = thread.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [gemini.turns, gemini.pending, gemini.progressText]);
+  }, [gemini.turns, gemini.pending]);
 
   return (
     <form
       className="gemini"
       onSubmit={(event) => {
         event.preventDefault();
-        if (needsKey) return;
         if (gemini.status !== "ready") return;
         void gemini.send();
       }}
     >
       <div className="thread" ref={thread}>
-        {loading ? (
-          <div className="ai-load">
-            <p className="fine">AI 준비 중…</p>
-            <div className="ai-bar" aria-hidden="true">
-              <span style={{ width: "40%" }} />
-            </div>
-          </div>
-        ) : null}
-        {!loading && gemini.turns.length === 0 ? (
-          <p className="fine">
-            {needsKey
-              ? "Gemini는 Google AI API 키가 필요합니다. aistudio.google.com 에서 키를 받아 한 번만 저장하세요. PC에서 모델을 돌리지 않아 멈추지 않습니다."
-              : "무엇이든 물어보세요."}
-          </p>
-        ) : null}
+        {gemini.turns.length === 0 ? <p className="fine">{openClawHint(gemini.status)}</p> : null}
         {gemini.turns.map((turn, index) => (
           <p key={`${turn.role}-${index}`} className={turn.role === "user" ? "bubble user" : "bubble model"}>
             {turn.text}
           </p>
         ))}
-        {gemini.pending ? <p className="fine">AI가 쓰는 중…</p> : null}
+        {gemini.pending ? <p className="fine">OpenClaw가 쓰는 중…</p> : null}
         {gemini.error ? <p className="fine">{gemini.error}</p> : null}
       </div>
-      {gemini.status === "error" ? (
+      {needsSetup ? (
         <div className="ask">
-          <button type="button" className="link-btn" onClick={() => gemini.retry()}>
-            다시 시도
+          <input
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              void gemini.saveToken(token).then((saved) => {
+                if (saved) setToken("");
+                else void gemini.refresh();
+              });
+            }}
+            placeholder="OpenClaw Gateway 토큰 (선택)"
+            aria-label="OpenClaw gateway token"
+            type="password"
+            autoComplete="off"
+            disabled={gemini.pending}
+          />
+          <button
+            type="button"
+            className="link-btn"
+            disabled={gemini.pending}
+            onClick={() => {
+              void gemini.saveToken(token).then((saved) => {
+                if (saved) setToken("");
+                else void gemini.refresh();
+              });
+            }}
+          >
+            {token.trim() ? "연결" : "다시 확인"}
           </button>
         </div>
-      ) : needsKey ? (
-        <>
-          <a className="text-btn" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">
-            API 키 발급
-          </a>
-          <div className="ask">
-            <input
-              value={key}
-              onChange={(event) => setKey(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-                event.preventDefault();
-                void gemini.saveKey(key).then((saved) => {
-                  if (saved) setKey("");
-                });
-              }}
-              placeholder="AIza… Google AI 키"
-              aria-label="Google AI key"
-              type="password"
-              autoComplete="off"
-              disabled={gemini.pending}
-            />
-            <button
-              type="button"
-              className="link-btn"
-              disabled={gemini.pending || !key.trim()}
-              onClick={() => {
-                void gemini.saveKey(key).then((saved) => {
-                  if (saved) setKey("");
-                });
-              }}
-            >
-              저장
-            </button>
-          </div>
-        </>
       ) : (
         <div className="ask">
           <input
@@ -102,8 +91,8 @@ export function GeminiView({ gemini }: { gemini: LocalAi }) {
               event.preventDefault();
               if (gemini.status === "ready" && gemini.draft.trim()) void gemini.send();
             }}
-            placeholder={loading ? "AI 준비 중…" : "AI에게 묻기"}
-            aria-label="Message AI"
+            placeholder="OpenClaw에게 묻기"
+            aria-label="Message OpenClaw"
             disabled={gemini.pending || gemini.status !== "ready"}
           />
           <button

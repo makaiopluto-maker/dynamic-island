@@ -407,6 +407,19 @@ export function useYouTube(connected: boolean) {
   const openPlaylist = useCallback(async (id: string) => {
     setError(null);
     try {
+      if (id === "popular") {
+        const response = await fetch("/api/youtube/library");
+        const body = (await response.json()) as { tracks?: YtTrack[]; error?: string };
+        if (body.error === "reconnect") setError("reconnect");
+        else if (body.error) setError("unreachable");
+        else {
+          setTracks(body.tracks ?? []);
+          setIndex(0);
+          setPosition(0);
+          setDuration(0);
+        }
+        return;
+      }
       const response = await fetch(`/api/youtube/playlist?id=${encodeURIComponent(id)}`);
       const body = (await response.json()) as { tracks?: YtTrack[]; error?: string };
       if (body.error === "reconnect") setError("reconnect");
