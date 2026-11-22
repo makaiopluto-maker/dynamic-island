@@ -156,6 +156,7 @@ export function Island({
         onPickContacts={onPickContacts}
         onDisconnect={onDisconnect}
         onRefresh={onRefresh}
+        onOpenPeek={onPeek}
         geminiReady={gemini.configured}
       />
     );

@@ -432,9 +432,9 @@ function CalendarPeek({
   );
 }
 
-function EventList({ events, error }: { events: CalendarEvent[]; error?: string }) {
-  if (error) return <p className="fine">Couldn’t reach Calendar.</p>;
-  if (!events.length) return <p className="fine">Nothing on the day.</p>;
+function EventList({ events, error, empty }: { events: CalendarEvent[]; error?: string; empty?: string }) {
+  if (error) return <p className="fine">캘린더에 닿지 못했습니다.</p>;
+  if (!events.length) return <p className="fine">{empty ?? "이날 일정이 없습니다."}</p>;
   return (
     <ul className="peek-scroll rows">
       {events.map((event) => (
@@ -464,6 +464,7 @@ export function PeekView({
   onPickContacts,
   onDisconnect,
   onRefresh,
+  onOpenPeek,
   geminiReady,
 }: {
   id: PeekId;
@@ -479,6 +480,7 @@ export function PeekView({
   onPickContacts: () => void;
   onDisconnect: () => void;
   onRefresh: () => void;
+  onOpenPeek: (id: PeekId) => void;
   geminiReady: boolean | null;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -620,7 +622,18 @@ export function PeekView({
     );
   }
 
-  if (id === "weather") return <WeatherPeek live={live} weather={weather.current} failed={weather.failed} />;
+  if (id === "weather") {
+    return (
+      <WeatherPeek
+        live={live}
+        weather={weather.current}
+        failed={weather.failed}
+        onRefresh={onRefresh}
+        onOpenSettings={() => onOpenPeek("plus")}
+        onOpenCalendar={() => onOpenPeek("calendar")}
+      />
+    );
+  }
 
   if (id === "plus") {
     return (
@@ -828,11 +841,18 @@ function WeatherPeek({
   live,
   weather,
   failed,
+  onRefresh,
+  onOpenSettings,
+  onOpenCalendar,
 }: {
   live: LiveState;
   weather: IslandWeather | null;
   failed: boolean;
+  onRefresh: () => void;
+  onOpenSettings: () => void;
+  onOpenCalendar: () => void;
 }) {
+  const connected = live.calendar.source === "google";
   return (
     <div className="peek stack">
       <div className="peek-head">
@@ -859,13 +879,41 @@ function WeatherPeek({
           ) : null}
         </>
       ) : (
-        <p className="fine">{failed ? "Seoul weather didn’t load." : "Seoul weather is still loading."}</p>
+        <p className="fine">{failed ? "서울 날씨를 불러오지 못했습니다." : "서울 날씨 불러오는 중…"}</p>
       )}
       <div className="peek-head">
         <h2>Today</h2>
-        <Badge source={live.calendar.source} />
+        {connected ? <span className="badge live">Google</span> : <span className="badge">Google</span>}
       </div>
-      <EventList events={live.calendar.events} error={live.calendar.error} />
+      {connected ? (
+        <>
+          <EventList events={live.calendar.events} error={live.calendar.error} empty="오늘 일정이 없습니다." />
+          <button type="button" className="text-btn" onClick={onOpenCalendar}>
+            캘린더에서 일정 등록
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="fine">Google을 연결하면 오늘 일정이 여기에 옵니다.</p>
+          {live.googleConfigured ? (
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                void connectGoogle().then((ok) => {
+                  if (ok) onRefresh();
+                });
+              }}
+            >
+              Google 연결
+            </button>
+          ) : (
+            <button type="button" className="link-btn" onClick={onOpenSettings}>
+              Settings에서 Google 설정
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 }
