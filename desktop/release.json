@@ -1,6 +1,6 @@
 {
-  "version": "1.4.1",
-  "notes": "YouTube Music volume control. Gemini clearly needs a Google AI API key (save once).",
+  "version": "1.4.2",
+  "notes": "Fix YouTube Music default volume (was stuck at 0%).",
   "download": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe",
-  "bytes": 96255759
+  "bytes": 96245539
 }

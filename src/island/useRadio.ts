@@ -6,7 +6,9 @@ const SAVED_KEY = "island-radio-saved";
 const VOLUME_KEY = "island-radio-volume";
 
 function loadVolume() {
-  const raw = Number(localStorage.getItem(VOLUME_KEY));
+  const stored = localStorage.getItem(VOLUME_KEY);
+  if (stored == null || stored === "") return 0.8;
+  const raw = Number(stored);
   if (!Number.isFinite(raw)) return 0.8;
   return Math.min(1, Math.max(0, raw));
 }
