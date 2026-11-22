@@ -16,6 +16,7 @@ npm run dev
 - 홈: [https://makaiopluto-maker.github.io/dynamic-island/](https://makaiopluto-maker.github.io/dynamic-island/)
 - 개인정보처리방침: [https://makaiopluto-maker.github.io/dynamic-island/privacy.html](https://makaiopluto-maker.github.io/dynamic-island/privacy.html)
 - 서비스 약관: [https://makaiopluto-maker.github.io/dynamic-island/terms.html](https://makaiopluto-maker.github.io/dynamic-island/terms.html)
+- 앱 아이콘(120px, Google용): [https://makaiopluto-maker.github.io/dynamic-island/logo-120.png](https://makaiopluto-maker.github.io/dynamic-island/logo-120.png)
 
 ## 조작
 
