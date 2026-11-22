@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Cover } from "./Cover.tsx";
 import { formatElapsed, formatRemaining } from "./format.ts";
 import { NextIcon, PauseIcon, PlayIcon, PrevIcon } from "./Icons.tsx";
@@ -190,33 +190,34 @@ function YouTubeMusic({
   onSource: (source: MusicSource) => void;
   live: LiveState;
 }) {
-  const frame = useRef<HTMLDivElement>(null);
-  const { attach } = youtube;
-  useEffect(() => {
-    attach(frame.current);
-    return () => attach(null);
-  }, [attach]);
   const length = Math.max(youtube.duration, 1);
   const progress = (youtube.position / length) * 100;
   const track = youtube.track;
   return (
     <div className="music-stage yt">
-      <div className="yt-engine" ref={frame} aria-hidden="true" />
       <SourceSwitch source={source} onSource={onSource} />
       <div className="now">
         <div className="now-art">
           {track ? <img src={`https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`} alt="" /> : <Cover theme="dusk" />}
         </div>
         <div className="now-copy">
-          <p className="kicker">YouTube Music</p>
+          <p className="kicker">Now playing</p>
           <h2>{track?.title ?? "노래 선택"}</h2>
-          <p className="fine">{track?.artist ?? "목록에서 곡을 고르면 여기서 재생됩니다"}</p>
+          <p className="fine">{track?.artist ?? "아래 목록에서 곡을 고르세요"}</p>
         </div>
       </div>
-      <div className="transport">
-        <button type="button" className="orb" onClick={youtube.toggle} aria-label={youtube.playing ? "Pause" : "Play"} aria-pressed={youtube.playing}>
-          {youtube.playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
+      <div className="skiprow">
+        <button type="button" className="icon-btn" onClick={youtube.prev} aria-label="Previous">
+          <PrevIcon />
         </button>
+        <button type="button" className="icon-btn main" onClick={youtube.toggle} aria-label={youtube.playing ? "Pause" : "Play"}>
+          {youtube.playing ? <PauseIcon size={22} /> : <PlayIcon size={22} />}
+        </button>
+        <button type="button" className="icon-btn" onClick={youtube.next} aria-label="Next">
+          <NextIcon />
+        </button>
+      </div>
+      <div className="transport">
         <span className="elapsed">{formatElapsed(youtube.position)}</span>
         <input
           className="scrub"
@@ -230,17 +231,6 @@ function YouTubeMusic({
           onChange={(event) => youtube.seek(Number(event.target.value))}
         />
         <span className="remain">{formatRemaining(Math.max(0, youtube.duration - youtube.position))}</span>
-      </div>
-      <div className="skiprow">
-        <button type="button" className="icon-btn" onClick={youtube.prev} aria-label="Previous">
-          <PrevIcon />
-        </button>
-        <button type="button" className="icon-btn main" onClick={youtube.toggle} aria-label={youtube.playing ? "Pause" : "Play"}>
-          {youtube.playing ? <PauseIcon size={22} /> : <PlayIcon size={22} />}
-        </button>
-        <button type="button" className="icon-btn" onClick={youtube.next} aria-label="Next">
-          <NextIcon />
-        </button>
       </div>
       {youtube.error === "reconnect" && live.googleConfigured ? (
         <a className="text-btn" href="/api/auth/google">
@@ -261,7 +251,7 @@ function YouTubeMusic({
         <input
           value={youtube.query}
           onChange={(event) => youtube.setQuery(event.target.value)}
-          placeholder="노래 찾기"
+          placeholder="노래 · 아티스트 검색"
           aria-label="Find a song"
         />
         <button type="submit" className="link-btn">
@@ -279,7 +269,7 @@ function YouTubeMusic({
               className={at === youtube.index ? "song on" : "song"}
               onClick={() => youtube.playAt(at)}
             >
-              <img src={`https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`} alt="" />
+              <img src={`https://i.ytimg.com/vi/${item.id}/mqdefault.jpg`} alt="" />
               <span>
                 <strong>{item.title}</strong>
                 <em>{item.artist}</em>

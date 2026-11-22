@@ -1,6 +1,6 @@
 {
-  "version": "1.2.1",
-  "notes": "Local AI now runs on CPU without WebGPU, so Windows setups without dxcompiler still work.",
+  "version": "1.2.2",
+  "notes": "Native YouTube Music UI \u2014 audio only, no embedded YouTube screen.",
   "download": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe",
-  "bytes": 100112545
+  "bytes": 100124952
 }

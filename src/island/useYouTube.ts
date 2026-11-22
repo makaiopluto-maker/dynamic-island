@@ -80,6 +80,18 @@ export function useYouTube(connected: boolean) {
     indexRef.current = index;
   });
 
+  useEffect(() => {
+    const node = document.createElement("div");
+    node.className = "yt-engine";
+    node.setAttribute("aria-hidden", "true");
+    document.body.appendChild(node);
+    setHost(node);
+    return () => {
+      node.remove();
+      setHost(null);
+    };
+  }, []);
+
   const playId = useCallback((id: string) => {
     setError(null);
     const player = playerRef.current;
@@ -133,8 +145,8 @@ export function useYouTube(connected: boolean) {
       if (dead || !window.YT?.Player) return;
       const videoId = pendingRef.current ?? tracksRef.current[indexRef.current]?.id;
       player = new window.YT.Player(mount, {
-        width: "480",
-        height: "270",
+        width: "320",
+        height: "180",
         videoId: videoId ?? undefined,
         host: "https://www.youtube-nocookie.com",
         playerVars: {
@@ -376,7 +388,6 @@ export function useYouTube(connected: boolean) {
   }, []);
 
   return {
-    attach: setHost,
     tracks,
     playlists,
     index,
