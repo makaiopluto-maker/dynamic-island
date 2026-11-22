@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "notes": "Built-in local AI with no API key or OpenClaw setup.",
+  "version": "1.2.1",
+  "notes": "Local AI now runs on CPU without WebGPU, so Windows setups without dxcompiler still work.",
   "download": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe",
-  "bytes": 97446074
+  "bytes": 100112545
 }

@@ -43,22 +43,30 @@ export function GeminiView({ gemini }: { gemini: LocalAi }) {
         {gemini.pending ? <p className="fine">AI가 쓰는 중…</p> : null}
         {gemini.error ? <p className="fine">{gemini.error}</p> : null}
       </div>
-      <div className="ask">
-        <input
-          value={gemini.draft}
-          onChange={(event) => gemini.setDraft(event.target.value)}
-          placeholder={loading ? "AI 준비 중…" : "AI에게 묻기"}
-          aria-label="Message AI"
-          disabled={gemini.pending || gemini.status !== "ready"}
-        />
-        <button
-          type="submit"
-          className="link-btn"
-          disabled={gemini.pending || gemini.status !== "ready" || !gemini.draft.trim()}
-        >
-          보내기
-        </button>
-      </div>
+      {gemini.status === "error" ? (
+        <div className="ask">
+          <button type="button" className="link-btn" onClick={() => gemini.retry()}>
+            다시 시도
+          </button>
+        </div>
+      ) : (
+        <div className="ask">
+          <input
+            value={gemini.draft}
+            onChange={(event) => gemini.setDraft(event.target.value)}
+            placeholder={loading ? "AI 준비 중…" : "AI에게 묻기"}
+            aria-label="Message AI"
+            disabled={gemini.pending || gemini.status !== "ready"}
+          />
+          <button
+            type="submit"
+            className="link-btn"
+            disabled={gemini.pending || gemini.status !== "ready" || !gemini.draft.trim()}
+          >
+            보내기
+          </button>
+        </div>
+      )}
     </form>
   );
 }
