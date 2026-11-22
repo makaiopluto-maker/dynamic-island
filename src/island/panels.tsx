@@ -130,6 +130,18 @@ export function RadioView({ radio }: { radio: Radio }) {
           onChange={(event) => radio.tuneMhz(Number(event.target.value))}
         />
       </label>
+      <label className="dial volume">
+        <strong>{Math.round(radio.volume * 100)}%</strong>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={radio.volume}
+          aria-label="Volume"
+          onChange={(event) => radio.setVolume(Number(event.target.value))}
+        />
+      </label>
       <div className="skiprow">
         <button type="button" className="icon-btn" onClick={radio.prev} aria-label="Previous channel">
           <PrevIcon />

@@ -555,8 +555,16 @@ function cacheKey(token) {
 const geminiHits = new Map();
 
 function sameOrigin(request) {
+  const page = new URL(request.url).origin;
   const origin = request.headers.get("origin");
-  return Boolean(origin) && origin === new URL(request.url).origin;
+  if (origin) return origin === page;
+  const referer = request.headers.get("referer");
+  if (!referer) return true;
+  try {
+    return new URL(referer).origin === page;
+  } catch {
+    return false;
+  }
 }
 
 function decodeXml(value) {

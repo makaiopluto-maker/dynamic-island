@@ -7,6 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { compareVersions, releaseFeed } from "../shared/release.mjs";
 
 const devUrl = process.env.ELECTRON_START_URL;
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 let child = null;
 let tray = null;
 let overlay = null;

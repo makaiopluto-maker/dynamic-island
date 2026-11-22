@@ -3,6 +3,13 @@ import type Hls from "hls.js";
 import { channels, dial } from "../../shared/radio.mjs";
 
 const SAVED_KEY = "island-radio-saved";
+const VOLUME_KEY = "island-radio-volume";
+
+function loadVolume() {
+  const raw = Number(localStorage.getItem(VOLUME_KEY));
+  if (!Number.isFinite(raw)) return 0.8;
+  return Math.min(1, Math.max(0, raw));
+}
 
 export type Station = {
   id: string;
@@ -81,6 +88,7 @@ export function useRadio() {
   const stationsRef = useRef(stations);
   const [index, setIndex] = useState(0);
   const [mhz, setMhz] = useState(94.5);
+  const [volume, setVolumeState] = useState(loadVolume);
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
   const [tuning, setTuning] = useState(false);
@@ -93,6 +101,7 @@ export function useRadio() {
   useEffect(() => {
     const node = new Audio();
     node.preload = "none";
+    node.volume = loadVolume();
     audio.current = node;
     const onPlaying = () => setPlaying(true);
     const onPause = () => setPlaying(false);
@@ -114,6 +123,13 @@ export function useRadio() {
       node.removeEventListener("error", onError);
       audio.current = null;
     };
+  }, []);
+
+  const setVolume = useCallback((value: number) => {
+    const next = Math.min(1, Math.max(0, value));
+    setVolumeState(next);
+    localStorage.setItem(VOLUME_KEY, String(next));
+    if (audio.current) audio.current.volume = next;
   }, []);
 
   const playNode = useCallback((node: HTMLAudioElement) => {
@@ -315,6 +331,7 @@ export function useRadio() {
     stations,
     index,
     mhz,
+    volume,
     playing,
     failed,
     tuning,
@@ -325,6 +342,7 @@ export function useRadio() {
     prev,
     choose,
     tuneMhz,
+    setVolume,
     save,
     forget,
   };

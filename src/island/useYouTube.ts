@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { searchCatalog, videoFromLink } from "../../shared/youtube.ts";
+import { searchCatalog, starterTracks, videoFromLink } from "../../shared/youtube.ts";
 
 export type YtTrack = { id: string; title: string; artist: string };
 export type YtPlaylist = { id: string; title: string; count: number };
@@ -22,6 +22,7 @@ type PlayerCtor = new (
     width: string;
     height: string;
     videoId?: string;
+    host?: string;
     playerVars: Record<string, string | number>;
     events: {
       onReady: () => void;
@@ -59,7 +60,7 @@ function loadPlayerApi() {
 }
 
 export function useYouTube(connected: boolean) {
-  const [tracks, setTracks] = useState<YtTrack[]>([]);
+  const [tracks, setTracks] = useState<YtTrack[]>(starterTracks);
   const [playlists, setPlaylists] = useState<YtPlaylist[]>([]);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -72,6 +73,7 @@ export function useYouTube(connected: boolean) {
   const tracksRef = useRef(tracks);
   const indexRef = useRef(index);
   const pendingRef = useRef<string | null>(null);
+  const nextRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     tracksRef.current = tracks;
@@ -79,13 +81,14 @@ export function useYouTube(connected: boolean) {
   });
 
   const playId = useCallback((id: string) => {
+    setError(null);
     const player = playerRef.current;
     if (!player) {
       pendingRef.current = id;
       return;
     }
     player.loadVideoById(id);
-    player.playVideo();
+    window.setTimeout(() => player.playVideo(), 80);
   }, []);
 
   const next = useCallback(() => {
@@ -117,20 +120,25 @@ export function useYouTube(connected: boolean) {
   }, [playId]);
 
   useEffect(() => {
+    nextRef.current = next;
+  }, [next]);
+
+  useEffect(() => {
     if (!host) return;
     let dead = false;
     let player: YtPlayer | null = null;
     const mount = document.createElement("div");
-    host.appendChild(mount);
+    host.replaceChildren(mount);
     void loadPlayerApi().then(() => {
       if (dead || !window.YT?.Player) return;
       const videoId = pendingRef.current ?? tracksRef.current[indexRef.current]?.id;
       player = new window.YT.Player(mount, {
-        width: "256",
-        height: "144",
+        width: "480",
+        height: "270",
         videoId: videoId ?? undefined,
+        host: "https://www.youtube-nocookie.com",
         playerVars: {
-          autoplay: videoId ? 1 : 0,
+          autoplay: 0,
           controls: 0,
           disablekb: 1,
           fs: 0,
@@ -144,24 +152,34 @@ export function useYouTube(connected: boolean) {
           onReady: () => {
             if (dead) return;
             playerRef.current = player;
+            const frame = player?.getIframe?.();
+            if (frame) {
+              frame.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture");
+              frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+            }
             const queued = pendingRef.current;
             if (queued) {
               pendingRef.current = null;
               player?.loadVideoById(queued);
+              window.setTimeout(() => player?.playVideo(), 120);
             }
           },
           onError: () => {
-            if (!dead) {
-              setPlaying(false);
-              setError("blocked");
-            }
+            if (dead) return;
+            setPlaying(false);
+            setError("blocked");
+            const list = tracksRef.current;
+            if (list.length > 1) window.setTimeout(() => nextRef.current(), 400);
           },
           onStateChange: (event) => {
             if (dead) return;
             const state = window.YT?.PlayerState;
-            if (event.data === state?.PLAYING) setPlaying(true);
+            if (event.data === state?.PLAYING) {
+              setPlaying(true);
+              setError(null);
+            }
             if (event.data === state?.PAUSED) setPlaying(false);
-            if (event.data === state?.ENDED) next();
+            if (event.data === state?.ENDED) nextRef.current();
           },
         },
       });
@@ -176,7 +194,7 @@ export function useYouTube(connected: boolean) {
         mount.remove();
       }
     };
-  }, [host, next]);
+  }, [host]);
 
   useEffect(() => {
     if (!playing) return;
@@ -192,10 +210,23 @@ export function useYouTube(connected: boolean) {
 
   useEffect(() => {
     let stop = false;
-    void searchCatalog("k-pop").then((found) => {
-      if (stop || !found.length) return;
-      setTracks((current) => (current.length ? current : found));
-    });
+    const load = async () => {
+      try {
+        const response = await fetch("/api/youtube/find?q=k-pop");
+        if (response.ok) {
+          const body = (await response.json()) as { tracks?: YtTrack[] };
+          if (!stop && body.tracks?.length) {
+            setTracks((current) => (current === starterTracks ? body.tracks! : current));
+            return;
+          }
+        }
+      } catch {
+        /* Fall through to the public catalog. */
+      }
+      const found = await searchCatalog("k-pop");
+      if (!stop && found.length) setTracks((current) => (current === starterTracks ? found : current));
+    };
+    void load();
     return () => {
       stop = true;
     };
@@ -308,6 +339,14 @@ export function useYouTube(connected: boolean) {
             showTracks(body.tracks);
             return;
           }
+        }
+      }
+      const local = await fetch(`/api/youtube/find?q=${encodeURIComponent(q)}`);
+      if (local.ok) {
+        const body = (await local.json()) as { tracks?: YtTrack[] };
+        if (body.tracks?.length) {
+          showTracks(body.tracks);
+          return;
         }
       }
       const found = await searchCatalog(q);
