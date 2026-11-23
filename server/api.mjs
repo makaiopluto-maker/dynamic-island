@@ -121,22 +121,33 @@ function emptyBundle() {
   };
 }
 
+function googleError(status, body = "") {
+  const text = String(body).toLowerCase();
+  const error = new Error("google");
+  error.status = status;
+  if (status === 401) error.code = "unauthorized";
+  else if (status === 403 && (text.includes("access_not_configured") || text.includes("has not been used") || text.includes("disabled")))
+    error.code = "api_disabled";
+  else if (status === 403 && (text.includes("insufficient") || text.includes("access_denied") || text.includes("permission")))
+    error.code = "scope";
+  else if (status === 403) error.code = "forbidden";
+  else error.code = "unreachable";
+  return error;
+}
+
 async function googleFetch(url, token) {
   const response = await fetch(url, {
     headers: { authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(8000),
   });
-  if (response.status === 401) {
-    const error = new Error("unauthorized");
-    error.status = 401;
-    throw error;
-  }
-  if (!response.ok) {
-    const error = new Error("google");
-    error.status = response.status;
-    throw error;
-  }
-  return response.json();
+  if (response.ok) return response.json();
+  const body = await response.text().catch(() => "");
+  throw googleError(response.status, body);
+}
+
+function serviceError(result) {
+  if (result.status !== "rejected") return undefined;
+  return result.reason?.code || "unreachable";
 }
 
 async function exchange(body) {
@@ -483,9 +494,9 @@ async function loadConnected(access, refresh, credentials, now) {
     }
     return {
       mail: mailResult.status === "fulfilled" ? mailResult.value : [],
-      mailError: mailResult.status === "rejected",
+      mailError: serviceError(mailResult),
       calendar: calendarResult.status === "fulfilled" ? calendarResult.value : [],
-      calendarError: calendarResult.status === "rejected",
+      calendarError: serviceError(calendarResult),
       account: accountResult.status === "fulfilled" ? accountResult.value : null,
     };
   };
@@ -1530,12 +1541,12 @@ export async function handleApi(request) {
         mail: {
           source: "google",
           messages: loaded.data.mail,
-          ...(loaded.data.mailError ? { error: "unreachable" } : {}),
+          ...(loaded.data.mailError ? { error: loaded.data.mailError } : {}),
         },
         calendar: {
           source: "google",
           events: loaded.data.calendar,
-          ...(loaded.data.calendarError ? { error: "unreachable" } : {}),
+          ...(loaded.data.calendarError ? { error: loaded.data.calendarError } : {}),
         },
       };
       cache.set(key, { at: Date.now(), body });

@@ -1,6 +1,6 @@
 {
-  "version": "1.5.1",
-  "notes": "Google login baked into the installer — no Settings Client ID/Secret step after install.",
+  "version": "1.5.2",
+  "notes": "Clearer Google Mail/Calendar errors when APIs or OAuth scopes are missing.",
   "download": "https://github.com/makaiopluto-maker/dynamic-island/releases/latest/download/Dynamic-Island-Setup.exe",
-  "bytes": 96267686
+  "bytes": 0
 }

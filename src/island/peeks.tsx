@@ -55,7 +55,7 @@ function MailList({
   openId?: string | null;
   onOpen?: (id: string) => void;
 }) {
-  if (error) return <p className="fine">메일에 닿지 못했습니다.</p>;
+  if (error) return <p className="fine">{googleServiceHint("mail", error)}</p>;
   if (!messages.length) return <p className="fine">새 메일이 없습니다. Google을 연결하면 여기에 옵니다.</p>;
   return (
     <ul className="peek-scroll rows">
@@ -429,8 +429,20 @@ function CalendarPeek({
   );
 }
 
+function googleServiceHint(kind: "mail" | "calendar", error?: string) {
+  if (error === "api_disabled") {
+    return kind === "mail"
+      ? "Gmail API가 꺼져 있습니다. Google Cloud에서 Gmail API를 사용 설정한 뒤 연결 해제 → 다시 로그인하세요."
+      : "Calendar API가 꺼져 있습니다. Google Cloud에서 Google Calendar API를 사용 설정한 뒤 연결 해제 → 다시 로그인하세요.";
+  }
+  if (error === "scope" || error === "forbidden") {
+    return "Google 권한이 부족합니다. OAuth 동의 화면의 데이터 액세스에 Gmail/Calendar 범위를 추가한 뒤 연결 해제 → 다시 로그인하세요.";
+  }
+  return kind === "mail" ? "메일에 닿지 못했습니다." : "캘린더에 닿지 못했습니다.";
+}
+
 function EventList({ events, error, empty }: { events: CalendarEvent[]; error?: string; empty?: string }) {
-  if (error) return <p className="fine">캘린더에 닿지 못했습니다.</p>;
+  if (error) return <p className="fine">{googleServiceHint("calendar", error)}</p>;
   if (!events.length) return <p className="fine">{empty ?? "이날 일정이 없습니다."}</p>;
   return (
     <ul className="peek-scroll rows">
